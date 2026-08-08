@@ -631,6 +631,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Importar por OAB
+  const btnImportarOab = document.getElementById('btn-importar-oab');
+  if (btnImportarOab) {
+    btnImportarOab.addEventListener('click', async () => {
+      try {
+        btnImportarOab.disabled = true;
+        btnImportarOab.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Solicitando...';
+        lucide.createIcons({ nodes: [btnImportarOab] });
+
+        const res = await api('/processos/importar-oab', { method: 'POST' });
+        showToast(res.message || 'Sincronização agendada', 'success');
+      } catch (error) {
+        showToast(error.message, 'error');
+      } finally {
+        btnImportarOab.disabled = false;
+        btnImportarOab.innerHTML = '<i data-lucide="refresh-cw"></i> Atualizar via OAB';
+        lucide.createIcons({ nodes: [btnImportarOab] });
+      }
+    });
+  }
+
   // Nova Credencial
   document.getElementById('btn-nova-credencial').addEventListener('click', () => openModal('modal-credencial'));
   document.getElementById('modal-credencial-close').addEventListener('click', () => closeModal('modal-credencial'));

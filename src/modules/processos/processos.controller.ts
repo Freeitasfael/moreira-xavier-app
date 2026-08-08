@@ -31,6 +31,27 @@ export async function processosController(app: FastifyInstance) {
     }
   });
 
+  // ─── POST /api/processos/importar-oab — Busca manual OAB ───
+  app.post('/api/processos/importar-oab', { preHandler: [authGuard] }, async (request, reply) => {
+    try {
+      const user = request.user as JwtPayload;
+      
+      const { oabSyncQueue } = await import('../../queues/scraping.worker.js');
+      await oabSyncQueue.add({
+        advogadoId: user.id,
+        oabNumero: user.oabNumero,
+        oabUf: user.oabUf,
+      });
+
+      reply.status(200).send({
+        success: true,
+        message: 'Busca de processos pela OAB foi agendada e está rodando em segundo plano.',
+      });
+    } catch (error: any) {
+      reply.status(500).send({ error: error.message || 'Erro ao agendar importação' });
+    }
+  });
+
   // ─── GET /api/processos — Listar processos ────────────────
   app.get('/api/processos', { preHandler: [authGuard] }, async (request, reply) => {
     const user = request.user as JwtPayload;

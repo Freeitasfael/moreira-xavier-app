@@ -129,6 +129,80 @@ export class TjmgConsultaPublicaScraper extends BaseScraper {
     );
   }
 
+  /**
+   * Busca processos associados a uma OAB na consulta pública do PJe TJMG.
+   * Retorna uma lista de CNJs encontrados.
+   */
+  async buscarProcessosPorOab(oabNumero: string, oabUf: string): Promise<string[]> {
+    return this.executar(
+      async () => {
+        console.log(`🔍 [TJMG] Buscando processos para OAB ${oabNumero}/${oabUf}...`);
+        await this.navegarPara(URLS.PJE_CONSULTA);
+
+        // 1. Esperar o campo OAB carregar
+        await this.esperarElemento('input[id*="numeroOAB"]', 15000);
+
+        // 2. Preencher a OAB
+        await this.preencherCampo('input[id*="numeroOAB"]', oabNumero);
+
+        // 3. Preencher a UF da OAB
+        const selectUfId = '[id*="estadoComboOAB"]';
+        if (this.page) {
+          // Precisamos encontrar o value correto para a UF no select. O Playwright tem o método selectOption.
+          await this.page.selectOption(selectUfId, { label: oabUf.toUpperCase() }).catch(() => {
+            console.warn(`⚠️ [TJMG] Não foi possível selecionar a UF ${oabUf} diretamente. Tentando pelo value.`);
+          });
+        }
+
+        // 4. Clicar em pesquisar
+        await this.delayHumano(500, 1200);
+        await this.clicar('#fPP\\:searchProcessos');
+
+        // 5. Esperar resultados carregarem (pode demorar bastante se houver muitos processos)
+        await this.delayHumano(3000, 6000);
+
+        // 6. Verificar se não encontrou nada
+        const semResultado = await this.extrairTexto('.rich-messages-label');
+        if (semResultado?.includes('Nenhum processo encontrado')) {
+          console.log(`⚠️ [TJMG] Nenhum processo encontrado para a OAB ${oabNumero}/${oabUf}`);
+          return [];
+        }
+
+        // 7. Extrair CNJs da tabela de resultados
+        const cnjs = new Set<string>();
+        
+        try {
+          await this.esperarElemento('.rich-table-row', 10000);
+          if (this.page) {
+            // No PJe, a lista de processos geralmente está em links na tabela.
+            // O formato do texto do link geralmente é o número CNJ formatado.
+            const links = await this.page.$$eval('.rich-table-row td a, .rich-table-row td span', elements => {
+              return elements.map(el => el.textContent?.trim() || '')
+                .filter(text => text.match(/\d{7}-\d{2}\.\d{4}\.\d{1}\.\d{2}\.\d{4}/));
+            });
+            
+            for (const link of links) {
+              cnjs.add(link.replace(/\D/g, ''));
+            }
+            
+            // TODO: Paginação. A consulta pública geralmente limita a 30 resultados por página.
+            // Se houver mais páginas, precisaríamos iterar clicando em 'Próximo'.
+            // Como é um MVP e a ideia é pegar processos ativos/recentes, a primeira página
+            // ou ajustar a query para ordenar por data é um bom começo.
+          }
+        } catch (e) {
+           console.warn(`⚠️ [TJMG] Erro ao extrair lista de processos da OAB: ${e}`);
+        }
+
+        const cnjList = Array.from(cnjs);
+        console.log(`✅ [TJMG] Encontrados ${cnjList.length} processos para a OAB ${oabNumero}/${oabUf}`);
+        return cnjList;
+      },
+      'busca_oab_pje',
+      [],
+    );
+  }
+
   // ─── Extração de dados ──────────────────────────────────
 
   /**

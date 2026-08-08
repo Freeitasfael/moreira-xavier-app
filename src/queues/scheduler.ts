@@ -50,6 +50,27 @@ export function iniciarCronJobs(): void {
   }, { timezone: 'America/Sao_Paulo' });
   jobs.push(prazosJob);
 
+  // ── Verificação Diária de Processos por OAB: 02:00 ─────────
+  const oabSyncJob = cron.schedule('0 2 * * *', async () => {
+    console.log('🔍 [Cron] Executando busca diária de novos processos por OAB...');
+    try {
+      const advogados = await prisma.advogado.findMany({ where: { ativo: true } });
+      const { oabSyncQueue } = await import('./scraping.worker.js');
+      
+      for (const adv of advogados) {
+        await oabSyncQueue.add({
+          advogadoId: adv.id,
+          oabNumero: adv.oabNumero,
+          oabUf: adv.oabUf,
+        });
+      }
+      console.log(`🔍 [Cron] Busca por OAB enfileirada para ${advogados.length} advogado(s)`);
+    } catch (error) {
+      console.error('❌ [Cron] Erro na busca por OAB:', error);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
+  jobs.push(oabSyncJob);
+
   // ── Resumo diário: todos os dias às 8h ────────────────────
   const resumoJob = cron.schedule('0 8 * * 1-5', async () => {
     console.log('📊 [Cron] Gerando resumo diário...');
@@ -113,7 +134,8 @@ export function iniciarCronJobs(): void {
   console.log('  ├─ 📅 Verificação de prazos: a cada 30 minutos');
   console.log('  ├─ 📊 Resumo diário: 08:00 (seg-sex)');
   console.log('  ├─ 📊 Status das filas: a cada 15 minutos');
-  console.log('  └─ 🧹 Limpeza semanal: dom 03:00');
+  console.log('  ├─ 🔍 Verificação por OAB: 02:00 (diário)');
+  console.log('  ├─ 🧹 Limpeza semanal: dom 03:00');
   console.log('');
 }
 

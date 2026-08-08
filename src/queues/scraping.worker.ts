@@ -27,6 +27,12 @@ interface ScrapingJobData {
   tipo: 'DATAJUD' | 'EPROC' | 'PJE';
 }
 
+export interface OabSyncJobData {
+  advogadoId: string;
+  oabNumero: string;
+  oabUf: string;
+}
+
 interface ScrapingResult {
   processoId: string;
   novasMovimentacoes: number;
@@ -42,6 +48,12 @@ const scrapingQueue = getQueue<ScrapingJobData>('scraping', {
   retryDelayMs: 10000,
 });
 
+export const oabSyncQueue = getQueue<OabSyncJobData>('oab_sync', {
+  concurrency: 1, // Limitar a 1 porque a busca por OAB é pesada
+  maxRetries: 1,
+  retryDelayMs: 30000,
+});
+
 /**
  * Processa um job de scraping (atualmente via DataJud)
  */
@@ -55,31 +67,104 @@ async function processScrapingJob(job: Job<ScrapingJobData>): Promise<ScrapingRe
     // Delay aleatório para evitar rate limiting
     await randomDelay(env.SCRAPING_DELAY_MIN, env.SCRAPING_DELAY_MAX);
 
-    // Consultar DataJud
-    const dadosDatajud = await datajudClient.consultarProcesso(numeroCnj, tribunal);
-    const tempoMs = Date.now() - startTime;
+    // Verificar se há um advogado associado para buscar credenciais
+    const relacao = await prisma.processoAdvogado.findFirst({
+      where: { processoId },
+      select: { advogadoId: true }
+    });
 
-    if (!dadosDatajud) {
-      // Processo não encontrado no DataJud, registrar e seguir
-      await registrarLogScraping(tribunal, 'consulta_publica', processoId, true, tempoMs);
+    let dadosParsed: any = null;
+    let novasMovimentacoes = 0;
+    let totalMovimentacoes = 0;
+    let usouScraperPrivado = false;
 
-      await prisma.processo.update({
-        where: { id: processoId },
-        data: {
-          ultimaVerif: new Date(),
-          proximaVerif: calcularProximaVerificacao(360),
-        },
-      });
+    if (relacao && tribunal === 'TJMG') {
+      const { authService } = await import('../modules/auth/auth.service.js');
+      // Procura credencial EPROC_TJMG (nossa implementação atual)
+      const credencial = await authService.obterCredencial(relacao.advogadoId, 'EPROC_TJMG');
 
-      return { processoId, novasMovimentacoes: 0, sucesso: true, tempoMs };
+      if (credencial) {
+        console.log(`🔑 [Scraping] Credencial encontrada para ${numeroCnj}. Usando scraper privado Eproc...`);
+        const { EprocTjmgPrivadoScraper } = await import('../scrapers/eproc/eproc-tjmg-privado.js');
+        const scraper = new EprocTjmgPrivadoScraper(credencial.login, credencial.senha);
+        
+        const resultado = await scraper.buscarProcessoLogado(numeroCnj);
+        
+        if (resultado.sucesso && resultado.dados) {
+          dadosParsed = resultado.dados;
+          usouScraperPrivado = true;
+          totalMovimentacoes = resultado.dados.movimentacoes.length;
+          
+          // Salvar novas movimentações
+          for (const mov of resultado.dados.movimentacoes) {
+            try {
+              await prisma.movimentacao.create({ 
+                data: {
+                  ...mov,
+                  processoId,
+                  hashConteudo: `${processoId}-${mov.data.toISOString()}-${mov.descricao}`.substring(0, 255)
+                }
+              });
+              novasMovimentacoes++;
+            } catch (error: any) {
+              // Ignora duplicatas
+            }
+          }
+        } else {
+          console.warn(`⚠️ [Scraping] Scraper privado falhou para ${numeroCnj}. Erro: ${resultado.erro}. Caindo para fallback (DataJud).`);
+        }
+      }
     }
 
-    // Atualizar dados do processo
-    const dadosParsed = parseProcessoDatajud(dadosDatajud);
+    if (!usouScraperPrivado) {
+      // Fallback: Consultar DataJud
+      console.log(`🌐 [Scraping] Usando fallback DataJud para ${numeroCnj}...`);
+      const dadosDatajud = await datajudClient.consultarProcesso(numeroCnj, tribunal);
+      
+      if (!dadosDatajud) {
+        // Processo não encontrado no DataJud, registrar e seguir
+        await registrarLogScraping(tribunal, 'consulta_publica', processoId, true, Date.now() - startTime);
+
+        await prisma.processo.update({
+          where: { id: processoId },
+          data: {
+            ultimaVerif: new Date(),
+            proximaVerif: calcularProximaVerificacao(360),
+          },
+        });
+
+        return { processoId, novasMovimentacoes: 0, sucesso: true, tempoMs: Date.now() - startTime };
+      }
+
+      dadosParsed = parseProcessoDatajud(dadosDatajud);
+      
+      if (dadosDatajud.movimentos?.length) {
+        totalMovimentacoes = dadosDatajud.movimentos.length;
+        const movimentacoesDatajud = parseMovimentacoesDatajud(dadosDatajud.movimentos, processoId);
+        for (const mov of movimentacoesDatajud) {
+          try {
+            await prisma.movimentacao.create({ data: mov as any });
+            novasMovimentacoes++;
+          } catch (error: any) {
+            // Ignora duplicatas
+          }
+        }
+      }
+    }
+
+    const tempoMs = Date.now() - startTime;
+
+    // Atualizar dados do processo (Capa)
     await prisma.processo.update({
       where: { id: processoId },
       data: {
-        ...dadosParsed,
+        classe: dadosParsed.classe,
+        assunto: dadosParsed.assunto,
+        comarca: dadosParsed.comarca,
+        vara: dadosParsed.vara,
+        parteAutora: dadosParsed.parteAutora,
+        parteRe: dadosParsed.parteRe,
+        valorCausa: dadosParsed.valorCausa,
         numeroCnj, // Não sobrescrever
         ultimaVerif: new Date(),
         proximaVerif: calcularProximaVerificacao(360),
@@ -87,29 +172,11 @@ async function processScrapingJob(job: Job<ScrapingJobData>): Promise<ScrapingRe
       },
     });
 
-    // Salvar novas movimentações
-    let novasMovimentacoes = 0;
-
-    if (dadosDatajud.movimentos?.length) {
-      const movimentacoes = parseMovimentacoesDatajud(dadosDatajud.movimentos, processoId);
-
-      for (const mov of movimentacoes) {
-        try {
-          await prisma.movimentacao.create({ data: mov as any });
-          novasMovimentacoes++;
-        } catch (error: any) {
-          // Ignora duplicatas (hash_conteudo unique constraint)
-          if (!error.message?.includes('Unique constraint')) {
-            console.warn(`⚠️ Erro ao salvar movimentação: ${error.message}`);
-          }
-        }
-      }
-    }
-
     // Registrar log de sucesso
-    await registrarLogScraping(tribunal, 'consulta_publica', processoId, true, tempoMs, null, {
+    await registrarLogScraping(tribunal, usouScraperPrivado ? 'scraping_logado' : 'consulta_datajud', processoId, true, tempoMs, null, {
       novasMovimentacoes,
-      totalMovimentacoes: dadosDatajud.movimentos?.length || 0,
+      totalMovimentacoes,
+      usouScraperPrivado
     });
 
     // Se encontrou novas movimentações, disparar workers de prazo e notificação
@@ -139,6 +206,69 @@ async function processScrapingJob(job: Job<ScrapingJobData>): Promise<ScrapingRe
       });
     }
 
+    throw error;
+  }
+}
+
+/**
+ * Processa um job de sincronização por OAB
+ */
+async function processOabSyncJob(job: Job<OabSyncJobData>): Promise<number> {
+  const { advogadoId, oabNumero, oabUf } = job.data;
+  console.log(`🔍 [OAB Sync] Iniciando busca para OAB ${oabNumero}/${oabUf}...`);
+
+  const { tjmgConsultaPublica } = await import('../scrapers/tjmg/tjmg-consulta-publica.js');
+  
+  try {
+    const cnjs = await tjmgConsultaPublica.buscarProcessosPorOab(oabNumero, oabUf);
+    let novosCount = 0;
+
+    for (const numeroCnj of cnjs) {
+      // Formatar CNJ
+      const cnjFormatado = numeroCnj.replace(/^(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})$/, '$1-$2.$3.$4.$5.$6');
+      
+      // Tentar encontrar o processo
+      let processo = await prisma.processo.findUnique({
+        where: { numeroCnj: cnjFormatado }
+      });
+
+      // Se não existir, criar com dados mínimos
+      if (!processo) {
+        processo = await prisma.processo.create({
+          data: {
+            numeroCnj: cnjFormatado,
+            tribunal: 'TJMG',
+            status: 'ATIVO',
+          }
+        });
+        novosCount++;
+      }
+
+      // Vincular ao advogado
+      await prisma.processoAdvogado.upsert({
+        where: {
+          advogadoId_processoId: {
+            advogadoId,
+            processoId: processo.id
+          }
+        },
+        update: {},
+        create: {
+          advogadoId,
+          processoId: processo.id
+        }
+      });
+
+      // Se foi recém criado ou nunca verificado, mandar para a fila de scraping
+      if (!processo.ultimaVerif) {
+        await enfileirarProcessoUnico(processo.id, processo.numeroCnj, processo.tribunal);
+      }
+    }
+
+    console.log(`✅ [OAB Sync] OAB ${oabNumero}/${oabUf} processada. ${cnjs.length} totais, ${novosCount} novos.`);
+    return cnjs.length;
+  } catch (error) {
+    console.error(`❌ [OAB Sync] Erro ao buscar processos da OAB ${oabNumero}:`, error);
     throw error;
   }
 }
@@ -261,6 +391,16 @@ export function iniciarWorkerScraping(): void {
 
   scrapingQueue.on('failed', (job: Job<ScrapingJobData>, error: Error) => {
     console.error(`❌ [Scraping] Job ${job.id} falhou: ${error.message}`);
+  });
+
+  oabSyncQueue.process(processOabSyncJob);
+
+  oabSyncQueue.on('completed', (job: Job<OabSyncJobData>) => {
+    console.log(`✅ [OAB Sync] Job ${job.id} finalizado`);
+  });
+
+  oabSyncQueue.on('failed', (job: Job<OabSyncJobData>, error: Error) => {
+    console.error(`❌ [OAB Sync] Job ${job.id} falhou: ${error.message}`);
   });
 
   console.log('🤖 Worker de scraping inicializado');
