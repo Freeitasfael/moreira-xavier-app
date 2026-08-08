@@ -134,7 +134,7 @@ export class TjmgConsultaPublicaScraper extends BaseScraper {
    * Retorna uma lista de CNJs encontrados.
    */
   async buscarProcessosPorOab(oabNumero: string, oabUf: string): Promise<string[]> {
-    return this.executar(
+    const result = await this.executar(
       async () => {
         console.log(`🔍 [TJMG] Buscando processos para OAB ${oabNumero}/${oabUf}...`);
         await this.navegarPara(URLS.PJE_CONSULTA);
@@ -199,8 +199,9 @@ export class TjmgConsultaPublicaScraper extends BaseScraper {
         return cnjList;
       },
       'busca_oab_pje',
-      [],
+      undefined,
     );
+    return result.sucesso && result.dados ? result.dados : [];
   }
 
   // ─── Extração de dados ──────────────────────────────────

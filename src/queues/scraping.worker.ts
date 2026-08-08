@@ -100,7 +100,7 @@ async function processScrapingJob(job: Job<ScrapingJobData>): Promise<ScrapingRe
             try {
               await prisma.movimentacao.create({ 
                 data: {
-                  ...mov,
+                  ...(mov as any),
                   processoId,
                   hashConteudo: `${processoId}-${mov.data.toISOString()}-${mov.descricao}`.substring(0, 255)
                 }

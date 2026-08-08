@@ -51,7 +51,7 @@ export class AuthService {
     });
 
     // 3. Disparar a busca inicial de processos pela OAB
-    const { oabSyncQueue } = await import('../queues/scraping.worker.js');
+    const { oabSyncQueue } = await import('../../queues/scraping.worker.js');
     await oabSyncQueue.add({
       advogadoId: advogado.id,
       oabNumero: advogado.oabNumero,
