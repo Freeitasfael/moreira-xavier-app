@@ -1,0 +1,296 @@
+// ===========================================
+// Moreira e Xavier — Schema do Banco de Dados
+// ===========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Advogado (Usuário do sistema) ──────────────────────────
+
+model Advogado {
+  id            String   @id @default(uuid())
+  nome          String
+  email         String   @unique
+  senhaHash     String   @map("senha_hash")
+  oabNumero     String   @map("oab_numero")
+  oabUf         String   @map("oab_uf") @db.Char(2)
+  telefone      String?
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now()) @map("criado_em")
+  atualizadoEm  DateTime @updatedAt @map("atualizado_em")
+
+  // Relações
+  processos     ProcessoAdvogado[]
+  credenciais   CredencialTribunal[]
+  notificacoes  Notificacao[]
+  configuracoes ConfiguracaoNotificacao?
+
+  @@map("advogados")
+}
+
+// ─── Processo Judicial ──────────────────────────────────────
+
+model Processo {
+  id              String          @id @default(uuid())
+  numeroCnj       String          @unique @map("numero_cnj")
+  tribunal        String          // Ex: "TJMG", "TRF1"
+  instancia       Int             @default(1)
+  classe          String?         // Ex: "Procedimento Comum Cível"
+  assunto         String?         // Ex: "Indenização por Dano Moral"
+  comarca         String?         // Ex: "Belo Horizonte"
+  vara            String?         // Ex: "1ª Vara Cível"
+  parteAutora     String?         @map("parte_autora")
+  parteRe         String?         @map("parte_re")
+  valorCausa      Decimal?        @map("valor_causa") @db.Decimal(15, 2)
+  status          StatusProcesso  @default(ATIVO)
+  sistemaOrigem   SistemaOrigem   @default(DATAJUD)
+  ultimaVerif     DateTime?       @map("ultima_verificacao")
+  proximaVerif    DateTime?       @map("proxima_verificacao")
+  intervaloVerif  Int             @default(360) @map("intervalo_verificacao_min") // minutos
+  criadoEm        DateTime        @default(now()) @map("criado_em")
+  atualizadoEm    DateTime        @updatedAt @map("atualizado_em")
+
+  // Relações
+  advogados       ProcessoAdvogado[]
+  movimentacoes   Movimentacao[]
+  prazos          Prazo[]
+  notificacoes    Notificacao[]
+
+  @@index([tribunal])
+  @@index([status])
+  @@index([proximaVerif])
+  @@map("processos")
+}
+
+// ─── Relação N:N entre Advogado e Processo ──────────────────
+
+model ProcessoAdvogado {
+  id          String   @id @default(uuid())
+  advogadoId  String   @map("advogado_id")
+  processoId  String   @map("processo_id")
+  papel       String   @default("patrono") // patrono, assistente, etc.
+  adicionadoEm DateTime @default(now()) @map("adicionado_em")
+
+  advogado    Advogado @relation(fields: [advogadoId], references: [id], onDelete: Cascade)
+  processo    Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@unique([advogadoId, processoId])
+  @@map("processo_advogado")
+}
+
+// ─── Movimentação Processual ────────────────────────────────
+
+model Movimentacao {
+  id          String   @id @default(uuid())
+  processoId  String   @map("processo_id")
+  data        DateTime
+  codigo      Int?     // Código SGT/CNJ da movimentação
+  descricao   String   @db.Text
+  tipo        TipoMovimentacao @default(DESPACHO)
+  complemento String?  @db.Text
+  fonte       SistemaOrigem @default(DATAJUD)
+  hashConteudo String? @map("hash_conteudo") // Para detectar duplicatas
+  criadoEm    DateTime @default(now()) @map("criado_em")
+
+  processo    Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@unique([processoId, hashConteudo])
+  @@index([processoId, data(sort: Desc)])
+  @@index([tipo])
+  @@map("movimentacoes")
+}
+
+// ─── Prazo Processual ───────────────────────────────────────
+
+model Prazo {
+  id            String       @id @default(uuid())
+  processoId    String       @map("processo_id")
+  tipo          TipoPrazo
+  descricao     String
+  dataInicio    DateTime     @map("data_inicio")
+  dataFim       DateTime     @map("data_fim")
+  diasUteis     Int          @map("dias_uteis")
+  status        StatusPrazo  @default(PENDENTE)
+  observacao    String?      @db.Text
+  movimentacaoOrigemId String? @map("movimentacao_origem_id")
+  criadoEm      DateTime    @default(now()) @map("criado_em")
+  atualizadoEm  DateTime    @updatedAt @map("atualizado_em")
+
+  processo      Processo    @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@index([dataFim])
+  @@index([status])
+  @@map("prazos")
+}
+
+// ─── Notificação ────────────────────────────────────────────
+
+model Notificacao {
+  id          String           @id @default(uuid())
+  advogadoId  String           @map("advogado_id")
+  processoId  String?          @map("processo_id")
+  tipo        TipoNotificacao
+  canal       CanalNotificacao
+  titulo      String
+  mensagem    String           @db.Text
+  prioridade  Prioridade       @default(NORMAL)
+  enviadaEm   DateTime?        @map("enviada_em")
+  lidaEm      DateTime?        @map("lida_em")
+  erro        String?          @db.Text
+  criadoEm    DateTime         @default(now()) @map("criado_em")
+
+  advogado    Advogado         @relation(fields: [advogadoId], references: [id], onDelete: Cascade)
+  processo    Processo?        @relation(fields: [processoId], references: [id], onDelete: SetNull)
+
+  @@index([advogadoId, lidaEm])
+  @@index([enviadaEm])
+  @@map("notificacoes")
+}
+
+// ─── Credenciais dos Tribunais (Criptografadas) ─────────────
+
+model CredencialTribunal {
+  id           String   @id @default(uuid())
+  advogadoId   String   @map("advogado_id")
+  tribunal     String   // Ex: "EPROC_TJMG", "PJE_TRT3"
+  sistema      SistemaOrigem
+  loginEnc     String   @map("login_enc")    // Criptografado AES-256
+  senhaEnc     String   @map("senha_enc")    // Criptografado AES-256
+  ativo        Boolean  @default(true)
+  ultimoAcesso DateTime? @map("ultimo_acesso")
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  advogado     Advogado @relation(fields: [advogadoId], references: [id], onDelete: Cascade)
+
+  @@unique([advogadoId, tribunal])
+  @@map("credenciais_tribunal")
+}
+
+// ─── Configuração de Notificação ────────────────────────────
+
+model ConfiguracaoNotificacao {
+  id              String   @id @default(uuid())
+  advogadoId      String   @unique @map("advogado_id")
+  emailAtivo      Boolean  @default(true) @map("email_ativo")
+  whatsappAtivo   Boolean  @default(false) @map("whatsapp_ativo")
+  whatsappNumero  String?  @map("whatsapp_numero")
+  resumoDiario    Boolean  @default(true) @map("resumo_diario")
+  horaResumo      String   @default("08:00") @map("hora_resumo") // HH:mm
+  alertaPrazoDias Int      @default(2) @map("alerta_prazo_dias") // Dias antes do vencimento
+  criadoEm        DateTime @default(now()) @map("criado_em")
+  atualizadoEm    DateTime @updatedAt @map("atualizado_em")
+
+  advogado        Advogado @relation(fields: [advogadoId], references: [id], onDelete: Cascade)
+
+  @@map("configuracao_notificacao")
+}
+
+// ─── Log de Scraping ────────────────────────────────────────
+
+model LogScraping {
+  id          String        @id @default(uuid())
+  tribunal    String
+  sistema     SistemaOrigem
+  acao        String        // "consulta_publica", "consulta_autenticada", "djen"
+  processoId  String?       @map("processo_id")
+  sucesso     Boolean
+  tempoMs     Int?          @map("tempo_ms")
+  erro        String?       @db.Text
+  detalhes    String?       @db.Text // JSON com metadados
+  criadoEm    DateTime      @default(now()) @map("criado_em")
+
+  @@index([tribunal, criadoEm])
+  @@index([sucesso])
+  @@map("log_scraping")
+}
+
+// ─── Enums ──────────────────────────────────────────────────
+
+enum StatusProcesso {
+  ATIVO
+  ARQUIVADO
+  SUSPENSO
+  BAIXADO
+  ERRO_SYNC
+}
+
+enum SistemaOrigem {
+  DATAJUD
+  EPROC_TJMG
+  PJE
+  ESAJ
+  EPROC_TRF
+  DJEN
+  MNI
+  MANUAL
+}
+
+enum TipoMovimentacao {
+  DESPACHO
+  DECISAO
+  SENTENCA
+  ACORDAO
+  INTIMACAO
+  CITACAO
+  PETICAO
+  JUNTADA
+  DISTRIBUICAO
+  AUDIENCIA
+  REMESSA
+  BAIXA
+  RECURSO
+  OUTROS
+}
+
+enum TipoPrazo {
+  CONTESTACAO
+  RECURSO
+  MANIFESTACAO
+  EMBARGOS
+  IMPUGNACAO
+  CUMPRIMENTO
+  PAGAMENTO
+  AUDIENCIA
+  PERICIA
+  GENERICO
+}
+
+enum StatusPrazo {
+  PENDENTE
+  EM_ANDAMENTO
+  CUMPRIDO
+  PERDIDO
+  CANCELADO
+}
+
+enum TipoNotificacao {
+  NOVA_MOVIMENTACAO
+  PRAZO_PROXIMO
+  PRAZO_CRITICO
+  PRAZO_VENCIDO
+  RESUMO_DIARIO
+  ERRO_SINCRONIZACAO
+}
+
+enum CanalNotificacao {
+  EMAIL
+  WHATSAPP
+  PUSH
+  SISTEMA
+}
+
+enum Prioridade {
+  BAIXA
+  NORMAL
+  ALTA
+  URGENTE
+}

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Moreira e Xavier — Sistema inteligente de acompanhamento processual para advogados. Monitore prazos, movimentações e receba alertas automaticamente.">
+  <title>Moreira & Xavier — Acompanhamento Processual</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ─── Tela de Login ──────────────────────────────────── -->
+    <div id="login-page" class="page active">
+      <div class="login-container">
+        <div class="login-bg-effects">
+          <div class="login-orb login-orb-1"></div>
+          <div class="login-orb login-orb-2"></div>
+          <div class="login-orb login-orb-3"></div>
+        </div>
+
+        <div class="login-card">
+          <div class="login-header">
+            <div class="login-logo">
+              <div class="logo-icon">
+                <i data-lucide="scale" class="logo-lucide"></i>
+              </div>
+              <h1>Moreira & Xavier</h1>
+              <p class="login-subtitle">Sistema de Acompanhamento Processual</p>
+            </div>
+          </div>
+
+          <form id="login-form" class="login-form">
+            <div class="form-group">
+              <label for="login-email">Email</label>
+              <div class="input-wrapper">
+                <i data-lucide="mail" class="input-icon"></i>
+                <input type="email" id="login-email" placeholder="seu@email.com" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="login-senha">Senha</label>
+              <div class="input-wrapper">
+                <i data-lucide="lock" class="input-icon"></i>
+                <input type="password" id="login-senha" placeholder="••••••••" required>
+              </div>
+            </div>
+
+            <button type="submit" id="login-btn" class="btn btn-primary btn-full">
+              <i data-lucide="log-in"></i>
+              Entrar
+            </button>
+
+            <div class="login-divider">
+              <span>ou</span>
+            </div>
+
+            <button type="button" id="show-registro-btn" class="btn btn-outline btn-full">
+              <i data-lucide="user-plus"></i>
+              Criar conta
+            </button>
+          </form>
+
+          <!-- Registro (oculto inicialmente) -->
+          <form id="registro-form" class="login-form hidden">
+            <div class="form-group">
+              <label for="reg-nome">Nome Completo</label>
+              <div class="input-wrapper">
+                <i data-lucide="user" class="input-icon"></i>
+                <input type="text" id="reg-nome" placeholder="Dr. João Silva" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="reg-email">Email</label>
+              <div class="input-wrapper">
+                <i data-lucide="mail" class="input-icon"></i>
+                <input type="email" id="reg-email" placeholder="seu@email.com" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="reg-oab">Nº OAB</label>
+                <div class="input-wrapper">
+                  <i data-lucide="badge" class="input-icon"></i>
+                  <input type="text" id="reg-oab" placeholder="123456" required>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="reg-uf">UF</label>
+                <div class="input-wrapper">
+                  <i data-lucide="map-pin" class="input-icon"></i>
+                  <select id="reg-uf" required>
+                    <option value="MG">MG</option>
+                    <option value="SP">SP</option>
+                    <option value="RJ">RJ</option>
+                    <option value="BA">BA</option>
+                    <option value="DF">DF</option>
+                    <option value="PR">PR</option>
+                    <option value="RS">RS</option>
+                    <option value="SC">SC</option>
+                    <option value="ES">ES</option>
+                    <option value="GO">GO</option>
+                    <option value="CE">CE</option>
+                    <option value="PE">PE</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="reg-senha">Senha</label>
+              <div class="input-wrapper">
+                <i data-lucide="lock" class="input-icon"></i>
+                <input type="password" id="reg-senha" placeholder="Mínimo 8 caracteres" required minlength="8">
+              </div>
+            </div>
+
+            <button type="submit" id="registro-btn" class="btn btn-primary btn-full">
+              <i data-lucide="user-plus"></i>
+              Criar Conta
+            </button>
+
+            <button type="button" id="show-login-btn" class="btn btn-ghost btn-full">
+              ← Voltar ao login
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Dashboard Principal ────────────────────────────── -->
+    <div id="dashboard-page" class="page">
+      <!-- Sidebar -->
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <i data-lucide="scale"></i>
+            <span>M&X</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-section="dashboard" id="nav-dashboard">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" data-section="processos" id="nav-processos">
+            <i data-lucide="folder-open"></i>
+            <span>Processos</span>
+          </button>
+          <button class="nav-item" data-section="prazos" id="nav-prazos">
+            <i data-lucide="clock"></i>
+            <span>Prazos</span>
+            <span id="badge-prazos" class="nav-badge hidden">0</span>
+          </button>
+          <button class="nav-item" data-section="notificacoes" id="nav-notificacoes">
+            <i data-lucide="bell"></i>
+            <span>Notificações</span>
+            <span id="badge-notificacoes" class="nav-badge hidden">0</span>
+          </button>
+          <button class="nav-item" data-section="credenciais" id="nav-credenciais">
+            <i data-lucide="key-round"></i>
+            <span>Credenciais</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-info">
+            <div class="user-avatar" id="user-avatar">AD</div>
+            <div class="user-details">
+              <span class="user-name" id="user-name">Advogado</span>
+              <span class="user-oab" id="user-oab">OAB/MG</span>
+            </div>
+          </div>
+          <button id="logout-btn" class="nav-item logout-btn">
+            <i data-lucide="log-out"></i>
+            <span>Sair</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <main class="main-content">
+        <!-- ─── Seção Dashboard ──────────────────────────── -->
+        <section id="section-dashboard" class="section active">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Dashboard</h2>
+              <p class="section-subtitle">Visão geral dos seus processos</p>
+            </div>
+            <button id="btn-novo-processo" class="btn btn-primary">
+              <i data-lucide="plus"></i>
+              Novo Processo
+            </button>
+          </div>
+
+          <!-- Stats Cards -->
+          <div class="stats-grid">
+            <div class="stat-card stat-card-blue">
+              <div class="stat-icon"><i data-lucide="folder-open"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-total">0</span>
+                <span class="stat-label">Processos</span>
+              </div>
+            </div>
+            <div class="stat-card stat-card-green">
+              <div class="stat-icon"><i data-lucide="activity"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-ativos">0</span>
+                <span class="stat-label">Ativos</span>
+              </div>
+            </div>
+            <div class="stat-card stat-card-orange">
+              <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-urgentes">0</span>
+                <span class="stat-label">Prazos Urgentes</span>
+              </div>
+            </div>
+            <div class="stat-card stat-card-purple">
+              <div class="stat-icon"><i data-lucide="clock"></i></div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-proximos">0</span>
+                <span class="stat-label">Prazos Próximos</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prazos Urgentes -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i data-lucide="alert-triangle"></i> Prazos Urgentes</h3>
+            </div>
+            <div class="card-body">
+              <div id="prazos-urgentes-list" class="prazos-list">
+                <div class="empty-state">
+                  <i data-lucide="check-circle"></i>
+                  <p>Nenhum prazo urgente 🎉</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Últimas Movimentações -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i data-lucide="activity"></i> Últimas Movimentações</h3>
+            </div>
+            <div class="card-body">
+              <div id="ultimas-movimentacoes" class="timeline">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <p>Nenhuma movimentação recente</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── Seção Processos ──────────────────────────── -->
+        <section id="section-processos" class="section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Processos</h2>
+              <p class="section-subtitle">Gerencie seus processos judiciais</p>
+            </div>
+            <button id="btn-novo-processo-2" class="btn btn-primary">
+              <i data-lucide="plus"></i>
+              Novo Processo
+            </button>
+          </div>
+
+          <!-- Filtros -->
+          <div class="filters-bar">
+            <div class="input-wrapper search-input">
+              <i data-lucide="search" class="input-icon"></i>
+              <input type="text" id="processos-busca" placeholder="Buscar por número, parte, classe...">
+            </div>
+            <select id="processos-status" class="select-filter">
+              <option value="">Todos os status</option>
+              <option value="ATIVO">Ativos</option>
+              <option value="ARQUIVADO">Arquivados</option>
+              <option value="SUSPENSO">Suspensos</option>
+            </select>
+          </div>
+
+          <!-- Lista de Processos -->
+          <div id="processos-list" class="processos-grid">
+            <div class="empty-state">
+              <i data-lucide="folder-plus"></i>
+              <p>Nenhum processo cadastrado</p>
+              <span>Clique em "Novo Processo" para começar</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── Seção Prazos ─────────────────────────────── -->
+        <section id="section-prazos" class="section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Prazos</h2>
+              <p class="section-subtitle">Controle todos os prazos processuais</p>
+            </div>
+          </div>
+
+          <div id="prazos-completos-list" class="prazos-full-list">
+            <div class="empty-state">
+              <i data-lucide="calendar-check"></i>
+              <p>Nenhum prazo pendente</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── Seção Notificações ───────────────────────── -->
+        <section id="section-notificacoes" class="section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Notificações</h2>
+              <p class="section-subtitle">Alertas e atualizações do sistema</p>
+            </div>
+            <button id="btn-ler-todas" class="btn btn-outline">
+              <i data-lucide="check-check"></i>
+              Marcar todas como lidas
+            </button>
+          </div>
+
+          <div id="notificacoes-list" class="notificacoes-list">
+            <div class="empty-state">
+              <i data-lucide="bell-off"></i>
+              <p>Nenhuma notificação</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── Seção Credenciais ────────────────────────── -->
+        <section id="section-credenciais" class="section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Credenciais dos Tribunais</h2>
+              <p class="section-subtitle">Gerencie seus acessos para scraping automático</p>
+            </div>
+            <button id="btn-nova-credencial" class="btn btn-primary">
+              <i data-lucide="key-round"></i>
+              Nova Credencial
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="card-body">
+              <div class="info-banner">
+                <i data-lucide="shield-check"></i>
+                <div>
+                  <strong>Suas credenciais são seguras</strong>
+                  <p>Todas as senhas são criptografadas com AES-256-GCM antes de serem armazenadas. Ninguém, nem mesmo os administradores do sistema, pode ver suas senhas em texto plano.</p>
+                </div>
+              </div>
+
+              <div id="credenciais-list" class="credenciais-grid">
+                <div class="empty-state">
+                  <i data-lucide="key-round"></i>
+                  <p>Nenhuma credencial cadastrada</p>
+                  <span>Adicione credenciais para habilitar o scraping automático</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ─── Modal Novo Processo ───────────────────────────── -->
+    <div id="modal-processo" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i data-lucide="plus-circle"></i> Novo Processo</h3>
+          <button class="modal-close" id="modal-processo-close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <form id="form-novo-processo" class="modal-body">
+          <div class="form-group">
+            <label for="input-cnj">Número CNJ do Processo</label>
+            <div class="input-wrapper">
+              <i data-lucide="hash" class="input-icon"></i>
+              <input type="text" id="input-cnj" placeholder="0000000-00.0000.0.00.0000"
+                     pattern="\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}" required>
+            </div>
+            <small class="form-hint">Formato: NNNNNNN-DD.AAAA.J.TR.OOOO</small>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="modal-processo-cancel">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btn-cadastrar-processo">
+              <i data-lucide="search"></i>
+              Consultar e Cadastrar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ─── Modal Nova Credencial ────────────────────────── -->
+    <div id="modal-credencial" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i data-lucide="key-round"></i> Nova Credencial</h3>
+          <button class="modal-close" id="modal-credencial-close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <form id="form-nova-credencial" class="modal-body">
+          <div class="form-group">
+            <label for="cred-tribunal">Tribunal</label>
+            <select id="cred-tribunal" required>
+              <option value="">Selecione...</option>
+              <option value="EPROC_TJMG">eproc - TJMG</option>
+              <option value="EPROC_TRF6">eproc - TRF6</option>
+              <option value="PJE_TRT3">PJe - TRT3 (MG)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cred-login">Login</label>
+            <div class="input-wrapper">
+              <i data-lucide="user" class="input-icon"></i>
+              <input type="text" id="cred-login" placeholder="Seu login no tribunal" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="cred-senha">Senha</label>
+            <div class="input-wrapper">
+              <i data-lucide="lock" class="input-icon"></i>
+              <input type="password" id="cred-senha" placeholder="Sua senha no tribunal" required>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="modal-credencial-cancel">Cancelar</button>
+            <button type="submit" class="btn btn-primary">
+              <i data-lucide="save"></i>
+              Salvar Credencial
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ─── Toast Notifications ──────────────────────────── -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
