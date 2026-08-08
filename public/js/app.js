@@ -17,10 +17,14 @@ const API_BASE = '/api';
 
 async function api(endpoint, options = {}) {
   const headers = {
-    'Content-Type': 'application/json',
     ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
     ...options.headers,
   };
+
+  // Only set Content-Type for requests that have a body
+  if (options.body) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
