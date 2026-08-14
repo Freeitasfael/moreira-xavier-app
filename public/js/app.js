@@ -216,6 +216,15 @@ async function loadDashboard() {
 }
 
 async function loadProcessos() {
+  const container = document.getElementById('processos-list');
+  
+  // Show skeleton loading
+  container.innerHTML = `
+    <div class="skeleton skeleton-card"></div>
+    <div class="skeleton skeleton-card"></div>
+    <div class="skeleton skeleton-card"></div>
+  `;
+  
   try {
     const busca = document.getElementById('processos-busca')?.value || '';
     const status = document.getElementById('processos-status')?.value || '';
@@ -226,7 +235,6 @@ async function loadProcessos() {
 
     const res = await api(`/processos?${params.toString()}`);
     const { processos } = res.data;
-    const container = document.getElementById('processos-list');
 
     if (processos.length === 0) {
       container.innerHTML = `
@@ -242,6 +250,13 @@ async function loadProcessos() {
     lucide.createIcons();
   } catch (error) {
     console.error('Erro ao carregar processos:', error);
+    container.innerHTML = `
+      <div class="empty-state">
+        <i data-lucide="alert-circle"></i>
+        <p>Erro ao carregar processos</p>
+        <span>${error.message}</span>
+      </div>`;
+    lucide.createIcons();
   }
 }
 
@@ -448,9 +463,121 @@ async function removerCredencial(tribunal) {
   }
 }
 
-function verProcesso(id) {
-  // Redirecionar para detalhes do processo (futuro)
-  showToast('Detalhes do processo em breve!', 'info');
+let _currentProcessoId = null;
+
+async function verProcesso(id) {
+  _currentProcessoId = id;
+  showSection('processo-detalhe');
+
+  // Show skeleton loading
+  document.getElementById('detalhe-cnj').textContent = 'Carregando...';
+  document.getElementById('detalhe-classe').textContent = '';
+  document.getElementById('detalhe-timeline').innerHTML = `
+    <div class="skeleton skeleton-text" style="width:90%"></div>
+    <div class="skeleton skeleton-text" style="width:70%"></div>
+    <div class="skeleton skeleton-text" style="width:80%"></div>
+  `;
+
+  try {
+    const res = await api(`/processos/${id}`);
+    const p = res.data;
+
+    // Header
+    document.getElementById('detalhe-cnj').textContent = p.numeroCnj;
+    document.getElementById('detalhe-classe').textContent = p.classe || 'Classe não informada';
+    
+    const statusBadge = document.getElementById('detalhe-status-badge');
+    statusBadge.textContent = p.status || 'ATIVO';
+    statusBadge.className = `processo-status status-${(p.status || 'ativo').toLowerCase()}`;
+
+    // Capa fields
+    document.getElementById('detalhe-tribunal').textContent = p.tribunal || '—';
+    document.getElementById('detalhe-vara').textContent = p.vara || '—';
+    document.getElementById('detalhe-assunto').textContent = p.assunto || '—';
+    document.getElementById('detalhe-comarca').textContent = p.comarca || '—';
+    document.getElementById('detalhe-autor').textContent = p.parteAutora || '—';
+    document.getElementById('detalhe-reu').textContent = p.parteRe || '—';
+    document.getElementById('detalhe-valor').textContent = p.valorCausa
+      ? `R$ ${parseFloat(p.valorCausa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+      : '—';
+    document.getElementById('detalhe-ultima-verif').textContent = p.ultimaVerif
+      ? formatDate(p.ultimaVerif) + ' ' + new Date(p.ultimaVerif).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : 'Nunca verificado';
+
+    // Prazos
+    const prazosContainer = document.getElementById('detalhe-prazos-list');
+    if (p.prazos && p.prazos.length > 0) {
+      prazosContainer.innerHTML = p.prazos.map(pr => renderPrazoItem(pr)).join('');
+    } else {
+      prazosContainer.innerHTML = `
+        <div class="empty-state small">
+          <i data-lucide="calendar-check"></i>
+          <p>Nenhum prazo vinculado</p>
+        </div>`;
+    }
+
+    // Movimentações
+    const timelineContainer = document.getElementById('detalhe-timeline');
+    const movs = p.movimentacoes || [];
+    document.getElementById('detalhe-mov-count').textContent = movs.length;
+
+    if (movs.length === 0) {
+      timelineContainer.innerHTML = `
+        <div class="empty-state">
+          <i data-lucide="inbox"></i>
+          <p>Nenhuma movimentação registrada</p>
+          <span>Clique em "Sincronizar" para buscar movimentações</span>
+        </div>`;
+    } else {
+      timelineContainer.innerHTML = movs.map(m => {
+        const tipo = (m.tipo || 'OUTROS').toUpperCase();
+        let dotClass = '';
+        let iconName = 'file-text';
+        if (tipo.includes('SENTENCA')) { dotClass = 'dot-sentenca'; iconName = 'gavel'; }
+        else if (tipo.includes('DECISAO')) { dotClass = 'dot-decisao'; iconName = 'scale'; }
+        else if (tipo.includes('INTIMACAO')) { dotClass = 'dot-intimacao'; iconName = 'bell'; }
+        else if (tipo.includes('DESPACHO')) { iconName = 'pen-tool'; }
+        else if (tipo.includes('PETICAO') || tipo.includes('JUNTADA')) { iconName = 'file-plus'; }
+
+        return `
+          <div class="timeline-full-item">
+            <div class="timeline-full-dot ${dotClass}">
+              <i data-lucide="${iconName}"></i>
+            </div>
+            <div class="timeline-full-content">
+              <div class="timeline-full-desc">${m.descricao}</div>
+              <div class="timeline-full-meta">
+                <span><i data-lucide="calendar" style="width:12px;height:12px"></i> ${formatDate(m.data)}</span>
+                <span><i data-lucide="tag" style="width:12px;height:12px"></i> ${tipo}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Sync button
+    const syncBtn = document.getElementById('btn-sync-detalhe');
+    syncBtn.onclick = async () => {
+      syncBtn.disabled = true;
+      syncBtn.innerHTML = '<div class="spinner"></div> Sincronizando...';
+      try {
+        const syncRes = await api(`/processos/${id}/sincronizar`, { method: 'POST' });
+        showToast(syncRes.message || 'Sincronizado!', 'success');
+        await verProcesso(id); // Reload
+      } catch (err) {
+        showToast(`Erro: ${err.message}`, 'error');
+      } finally {
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = '<i data-lucide="refresh-cw"></i> Sincronizar';
+        lucide.createIcons({ nodes: [syncBtn] });
+      }
+    };
+
+    lucide.createIcons();
+  } catch (error) {
+    showToast(`Erro ao carregar processo: ${error.message}`, 'error');
+    showSection('processos');
+  }
 }
 
 async function updateBadges() {
@@ -587,6 +714,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.nav-item[data-section]').forEach((item) => {
     item.addEventListener('click', () => {
       showSection(item.dataset.section);
+      // Close mobile sidebar
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('visible');
     });
   });
 
@@ -596,6 +728,25 @@ document.addEventListener('DOMContentLoaded', () => {
     showPage('login-page');
     showToast('Até logo!', 'info');
   });
+
+  // ─── Mobile Sidebar Menu ─────────────────────────────────
+  const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      sidebarOverlay.classList.toggle('visible');
+    });
+  }
+
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.remove('visible');
+    });
+  }
 
   // ─── Modals ─────────────────────────────────────────────
   // Novo Processo

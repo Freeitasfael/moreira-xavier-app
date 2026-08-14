@@ -141,6 +141,12 @@
 
     <!-- ─── Dashboard Principal ────────────────────────────── -->
     <div id="dashboard-page" class="page">
+      <!-- Mobile Hamburger -->
+      <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Menu">
+        <i data-lucide="menu"></i>
+      </button>
+      <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
       <!-- Sidebar -->
       <aside id="sidebar" class="sidebar">
         <div class="sidebar-header">
@@ -377,6 +383,99 @@
                   <i data-lucide="key-round"></i>
                   <p>Nenhuma credencial cadastrada</p>
                   <span>Adicione credenciais para habilitar o scraping automático</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- ─── Seção Detalhe do Processo ─────────────────── -->
+        <section id="section-processo-detalhe" class="section">
+          <div class="section-header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <button class="btn btn-ghost btn-icon" onclick="showSection('processos')" title="Voltar">
+                <i data-lucide="arrow-left"></i>
+              </button>
+              <div>
+                <h2 class="section-title" id="detalhe-cnj">Processo</h2>
+                <p class="section-subtitle" id="detalhe-classe">Carregando...</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-primary" id="btn-sync-detalhe">
+                <i data-lucide="refresh-cw"></i>
+                Sincronizar
+              </button>
+              <span class="processo-status" id="detalhe-status-badge">ATIVO</span>
+            </div>
+          </div>
+
+          <!-- Dados da Capa -->
+          <div class="detalhe-grid">
+            <div class="card detalhe-capa">
+              <div class="card-header"><h3><i data-lucide="file-text"></i> Dados do Processo</h3></div>
+              <div class="card-body">
+                <div class="detalhe-field-grid" id="detalhe-capa-fields">
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Tribunal</span>
+                    <span class="detalhe-value" id="detalhe-tribunal">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Vara / Órgão Julgador</span>
+                    <span class="detalhe-value" id="detalhe-vara">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Assunto</span>
+                    <span class="detalhe-value" id="detalhe-assunto">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Comarca</span>
+                    <span class="detalhe-value" id="detalhe-comarca">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Parte Autora</span>
+                    <span class="detalhe-value" id="detalhe-autor">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Parte Ré</span>
+                    <span class="detalhe-value" id="detalhe-reu">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Valor da Causa</span>
+                    <span class="detalhe-value" id="detalhe-valor">—</span>
+                  </div>
+                  <div class="detalhe-field">
+                    <span class="detalhe-label">Última Verificação</span>
+                    <span class="detalhe-value" id="detalhe-ultima-verif">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Prazos do Processo -->
+            <div class="card detalhe-prazos">
+              <div class="card-header"><h3><i data-lucide="clock"></i> Prazos</h3></div>
+              <div class="card-body">
+                <div id="detalhe-prazos-list" class="prazos-list">
+                  <div class="empty-state small">
+                    <i data-lucide="calendar-check"></i>
+                    <p>Nenhum prazo vinculado</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timeline de Movimentações -->
+          <div class="card detalhe-movimentacoes">
+            <div class="card-header">
+              <h3><i data-lucide="activity"></i> Movimentações</h3>
+              <span class="badge" id="detalhe-mov-count">0</span>
+            </div>
+            <div class="card-body">
+              <div id="detalhe-timeline" class="timeline-full">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <p>Nenhuma movimentação registrada</p>
                 </div>
               </div>
             </div>
