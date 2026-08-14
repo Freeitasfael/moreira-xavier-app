@@ -213,6 +213,27 @@ model LogScraping {
   @@map("log_scraping")
 }
 
+// ─── Fila de Trabalhos (Job Queue) ────────────────────────
+model FilaJob {
+  id            String    @id @default(uuid())
+  fila          String    @map("queue")
+  dados         Json      @map("data")
+  status        String    @default("WAITING") // WAITING, ACTIVE, COMPLETED, FAILED, RETRYING
+  prioridade    Int       @default(0) @map("priority")
+  tentativas    Int       @default(0) @map("attempts")
+  maxTentativas Int       @default(3) @map("max_attempts")
+  erro          String?   @db.Text
+  resultado     Json?     @map("result")
+  agendadoPara  DateTime? @map("scheduled_for") // para retries com delay
+  criadoEm      DateTime  @default(now()) @map("created_at")
+  processadoEm  DateTime? @map("processed_at")
+  concluidoEm   DateTime? @map("completed_at")
+  atualizadoEm  DateTime  @updatedAt @map("updated_at")
+
+  @@index([fila, status, agendadoPara])
+  @@map("job_queue")
+}
+
 // ─── Enums ──────────────────────────────────────────────────
 
 enum StatusProcesso {
