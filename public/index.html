@@ -6,13 +6,16 @@
   <meta name="description" content="Moreira e Xavier — Sistema inteligente de acompanhamento processual para advogados. Monitore prazos, movimentações e receba alertas automaticamente.">
   <title>Moreira & Xavier — Acompanhamento Processual</title>
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts — Inter for UI, JetBrains Mono for numbers -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;550;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-family='Inter' font-weight='700' font-size='16' fill='white'%3EMX%3C/text%3E%3C/svg%3E">
 
   <link rel="stylesheet" href="/css/styles.css">
 </head>
@@ -202,8 +205,8 @@
         <section id="section-dashboard" class="section active">
           <div class="section-header">
             <div>
-              <h2 class="section-title">Dashboard</h2>
-              <p class="section-subtitle">Visão geral dos seus processos</p>
+              <h2 class="section-title" id="dashboard-greeting">Bom dia</h2>
+              <p class="section-subtitle">Aqui está o resumo dos seus processos</p>
             </div>
             <button id="btn-novo-processo" class="btn btn-primary">
               <i data-lucide="plus"></i>
@@ -214,7 +217,7 @@
           <!-- Stats Cards -->
           <div class="stats-grid">
             <div class="stat-card stat-card-blue">
-              <div class="stat-icon"><i data-lucide="folder-open"></i></div>
+              <div class="stat-icon"><i data-lucide="briefcase"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-total">0</span>
                 <span class="stat-label">Processos</span>
@@ -224,21 +227,21 @@
               <div class="stat-icon"><i data-lucide="activity"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-ativos">0</span>
-                <span class="stat-label">Ativos</span>
+                <span class="stat-label">Em andamento</span>
               </div>
             </div>
             <div class="stat-card stat-card-orange">
               <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-urgentes">0</span>
-                <span class="stat-label">Prazos Urgentes</span>
+                <span class="stat-label">Prazos urgentes</span>
               </div>
             </div>
             <div class="stat-card stat-card-purple">
-              <div class="stat-icon"><i data-lucide="clock"></i></div>
+              <div class="stat-icon"><i data-lucide="calendar-clock"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-proximos">0</span>
-                <span class="stat-label">Prazos Próximos</span>
+                <span class="stat-label">Prazos esta semana</span>
               </div>
             </div>
           </div>
@@ -252,7 +255,8 @@
               <div id="prazos-urgentes-list" class="prazos-list">
                 <div class="empty-state">
                   <i data-lucide="check-circle"></i>
-                  <p>Nenhum prazo urgente 🎉</p>
+                  <p>Tudo em dia!</p>
+                  <span>Nenhum prazo urgente no momento</span>
                 </div>
               </div>
             </div>
@@ -310,9 +314,9 @@
           <!-- Lista de Processos -->
           <div id="processos-list" class="processos-grid">
             <div class="empty-state">
-              <i data-lucide="folder-plus"></i>
-              <p>Nenhum processo cadastrado</p>
-              <span>Clique em "Novo Processo" para começar</span>
+              <i data-lucide="briefcase"></i>
+              <p>Nenhum processo vinculado</p>
+              <span>Adicione um processo pelo número CNJ ou sincronize pela sua OAB</span>
             </div>
           </div>
         </section>

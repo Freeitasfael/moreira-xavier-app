@@ -111,13 +111,23 @@ function showToast(message, type = 'info') {
     success: 'check-circle',
     error: 'alert-circle',
     info: 'info',
+    warning: 'alert-triangle',
+  };
+  const titles = {
+    success: 'Sucesso',
+    error: 'Erro',
+    info: 'Info',
+    warning: 'Atenção',
   };
 
   const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
+  toast.className = `toast ${type}`;
   toast.innerHTML = `
-    <i data-lucide="${icons[type] || 'info'}"></i>
-    <span class="toast-message">${message}</span>
+    <i data-lucide="${icons[type] || 'info'}" class="toast-icon"></i>
+    <div class="toast-content">
+      <div class="toast-title">${titles[type] || 'Info'}</div>
+      <div class="toast-message">${message}</div>
+    </div>
     <button class="toast-close"><i data-lucide="x"></i></button>
   `;
 
@@ -127,10 +137,42 @@ function showToast(message, type = 'info') {
   toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
   setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transform = 'translateX(100%)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
+    toast.style.transform = 'translateX(20px)';
+    toast.style.transition = 'all 0.25s ease';
+    setTimeout(() => toast.remove(), 250);
+  }, 4500);
+}
+
+// ─── Smart Greeting ─────────────────────────────────────────
+
+function updateGreeting() {
+  const el = document.getElementById('dashboard-greeting');
+  if (!el) return;
+  const hour = new Date().getHours();
+  const nome = state.user?.nome?.split(' ')[0] || '';
+  let saudacao;
+  if (hour < 12) saudacao = 'Bom dia';
+  else if (hour < 18) saudacao = 'Boa tarde';
+  else saudacao = 'Boa noite';
+  el.textContent = nome ? `${saudacao}, ${nome}` : saudacao;
+}
+
+// ─── Animated Counter ───────────────────────────────────────
+
+function animateCounter(elementId, target) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const current = parseInt(el.textContent) || 0;
+  if (current === target) return;
+  const duration = 400;
+  const start = performance.now();
+  function step(timestamp) {
+    const progress = Math.min((timestamp - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+    el.textContent = Math.round(current + (target - current) * eased);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 // ─── Modal ──────────────────────────────────────────────────
@@ -148,6 +190,7 @@ function closeModal(modalId) {
 // ─── Data Loaders ───────────────────────────────────────────
 
 async function loadDashboard() {
+  updateGreeting();
   try {
     const [statsRes, prazosRes] = await Promise.all([
       api('/processos/estatisticas'),
@@ -155,10 +198,10 @@ async function loadDashboard() {
     ]);
 
     const stats = statsRes.data;
-    document.getElementById('stat-total').textContent = stats.totalProcessos;
-    document.getElementById('stat-ativos').textContent = stats.processosAtivos;
-    document.getElementById('stat-urgentes').textContent = stats.prazosUrgentes;
-    document.getElementById('stat-proximos').textContent = stats.prazosProximos;
+    animateCounter('stat-total', stats.totalProcessos);
+    animateCounter('stat-ativos', stats.processosAtivos);
+    animateCounter('stat-urgentes', stats.prazosUrgentes);
+    animateCounter('stat-proximos', stats.prazosProximos);
 
     // Prazos urgentes
     const prazosContainer = document.getElementById('prazos-urgentes-list');
@@ -168,7 +211,8 @@ async function loadDashboard() {
       prazosContainer.innerHTML = `
         <div class="empty-state">
           <i data-lucide="check-circle"></i>
-          <p>Nenhum prazo urgente 🎉</p>
+          <p>Tudo em dia!</p>
+          <span>Nenhum prazo urgente no momento</span>
         </div>`;
     } else {
       prazosContainer.innerHTML = prazos
