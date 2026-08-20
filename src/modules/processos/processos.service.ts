@@ -23,7 +23,8 @@ import type { Processo, Movimentacao } from '@prisma/client';
 
 export class ProcessoService {
   /**
-   * Cadastra um novo processo para acompanhamento
+   * Cadastra um novo processo para acompanhamento.
+   * Estratégia: DataJud → TJMG API → cadastro manual com sync agendada
    */
   async cadastrarProcesso(advogadoId: string, numeroCnj: string): Promise<Processo> {
     // Validar número CNJ
@@ -35,51 +36,95 @@ export class ProcessoService {
     });
 
     if (!processo) {
-      // Tentar buscar dados no DataJud
       const tribunal = identificarTribunal(numeroFormatado);
-      let dadosDatajud = null;
+      let dadosCapa: any = null;
+      let movimentacoesRaw: any[] = [];
+      let fonteUsada = 'MANUAL';
 
+      // ── Camada 1: DataJud ─────────────────────────────────
       try {
-        dadosDatajud = await datajudClient.consultarProcesso(numeroFormatado, tribunal);
-      } catch (error) {
-        console.warn(`⚠️ Não foi possível consultar DataJud para ${numeroFormatado}:`, error);
+        console.log(`🌐 [Cadastro] Consultando DataJud para ${numeroFormatado}...`);
+        const dadosDatajud = await datajudClient.consultarProcesso(numeroFormatado, tribunal);
+
+        if (dadosDatajud) {
+          dadosCapa = parseProcessoDatajud(dadosDatajud);
+          movimentacoesRaw = dadosDatajud.movimentos || [];
+          fonteUsada = 'DATAJUD';
+          console.log(`✅ [Cadastro] DataJud retornou dados: ${movimentacoesRaw.length} movimentação(ões)`);
+        } else {
+          console.log(`⚠️ [Cadastro] DataJud: processo não encontrado no índice`);
+        }
+      } catch (error: any) {
+        console.warn(`⚠️ [Cadastro] DataJud erro: ${error.message}`);
       }
 
-      // Criar processo com dados do DataJud ou dados mínimos
-      const dados = dadosDatajud
-        ? parseProcessoDatajud(dadosDatajud)
-        : {
-            numeroCnj: numeroFormatado,
-            tribunal,
-            sistemaOrigem: 'MANUAL' as const,
-          };
+      // ── Camada 2: TJMG API HTTP (se DataJud não encontrou e é MG) ──
+      if (!dadosCapa && (tribunal === 'TJMG' || tribunal.includes('TJMG'))) {
+        try {
+          console.log(`🔍 [Cadastro] Tentando TJMG API HTTP para ${numeroFormatado}...`);
+          const { tjmgApiClient } = await import('../../scrapers/tjmg/tjmg-api.client.js');
+          const dadosTjmg = await tjmgApiClient.consultarProcesso(numeroFormatado);
+
+          if (dadosTjmg) {
+            dadosCapa = {
+              numeroCnj: numeroFormatado,
+              tribunal,
+              classe: dadosTjmg.classe || null,
+              assunto: dadosTjmg.assunto || null,
+              comarca: dadosTjmg.comarca || null,
+              vara: dadosTjmg.vara || null,
+              parteAutora: dadosTjmg.parteAutora || null,
+              parteRe: dadosTjmg.parteRe || null,
+              sistemaOrigem: 'EPROC_TJMG' as const,
+            };
+            fonteUsada = 'TJMG_API';
+            console.log(`✅ [Cadastro] TJMG API retornou dados: ${dadosTjmg.movimentacoes.length} movimentação(ões)`);
+          } else {
+            console.log(`⚠️ [Cadastro] TJMG API: processo não encontrado`);
+          }
+        } catch (error: any) {
+          console.warn(`⚠️ [Cadastro] TJMG API erro: ${error.message}`);
+        }
+      }
+
+      // ── Criar processo no banco ───────────────────────────
+      const dadosFinais = dadosCapa || {
+        numeroCnj: numeroFormatado,
+        tribunal,
+        sistemaOrigem: 'MANUAL' as const,
+      };
 
       processo = await prisma.processo.create({
         data: {
-          ...dados,
+          ...dadosFinais,
           numeroCnj: numeroFormatado,
-          tribunal: dados.tribunal || tribunal,
+          tribunal: dadosFinais.tribunal || tribunal,
+          status: 'ATIVO',
           ultimaVerif: new Date(),
-          proximaVerif: new Date(Date.now() + 6 * 60 * 60 * 1000), // 6 horas
+          proximaVerif: new Date(Date.now() + 1 * 60 * 60 * 1000), // Verificar em 1 hora
         },
       });
 
-      // Se veio do DataJud, salvar movimentações
-      if (dadosDatajud?.movimentos?.length) {
-        const movimentacoes = parseMovimentacoesDatajud(dadosDatajud.movimentos, processo.id);
+      console.log(`✅ [Cadastro] Processo criado (fonte: ${fonteUsada}): ${processo.id}`);
 
+      // ── Salvar movimentações do DataJud ────────────────────
+      if (fonteUsada === 'DATAJUD' && movimentacoesRaw.length > 0) {
+        const movimentacoes = parseMovimentacoesDatajud(movimentacoesRaw, processo.id);
+        let salvos = 0;
         for (const mov of movimentacoes) {
           try {
-            await prisma.movimentacao.create({
-              data: mov as any,
-            });
+            await prisma.movimentacao.create({ data: mov as any });
+            salvos++;
           } catch (error: any) {
-            // Ignora duplicatas (constraint unique no hashConteudo)
-            if (!error.message?.includes('Unique constraint')) {
-              console.warn('Erro ao salvar movimentação:', error.message);
-            }
+            // Ignora duplicatas
           }
         }
+        console.log(`✅ [Cadastro] ${salvos}/${movimentacoes.length} movimentações salvas`);
+      }
+
+      // ── Se não encontrou em nenhuma fonte, agendar sync ───
+      if (fonteUsada === 'MANUAL') {
+        console.log(`📋 [Cadastro] Processo cadastrado sem dados. Sync será tentada em breve.`);
       }
     }
 
