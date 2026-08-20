@@ -126,4 +126,72 @@ export async function processosController(app: FastifyInstance) {
       reply.status(400).send({ error: error.message });
     }
   });
+
+  // ─── GET /api/scraping/status — Monitoramento de filas ────
+  app.get('/api/scraping/status', { preHandler: [authGuard] }, async (request, reply) => {
+    try {
+      const { prisma } = await import('../../config/database.js');
+      const { getAllQueuesStatsAsync } = await import('../../queues/task-queue.js');
+
+      // Estatísticas das filas
+      let filas = {};
+      try {
+        filas = await getAllQueuesStatsAsync();
+      } catch {
+        filas = { erro: 'Filas não inicializadas' };
+      }
+
+      // Últimos logs de scraping (10 mais recentes)
+      const ultimosLogs = await prisma.logScraping.findMany({
+        orderBy: { criadoEm: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          tribunal: true,
+          sistema: true,
+          acao: true,
+          sucesso: true,
+          tempoMs: true,
+          erro: true,
+          criadoEm: true,
+        },
+      });
+
+      // Jobs pendentes na fila
+      const jobsPendentes = await prisma.filaJob.count({
+        where: { status: { in: ['WAITING', 'RETRYING'] } },
+      });
+
+      const jobsAtivos = await prisma.filaJob.count({
+        where: { status: 'ACTIVE' },
+      });
+
+      const jobsFalhos = await prisma.filaJob.findMany({
+        where: { status: 'FAILED' },
+        orderBy: { atualizadoEm: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          fila: true,
+          erro: true,
+          tentativas: true,
+          atualizadoEm: true,
+        },
+      });
+
+      reply.send({
+        success: true,
+        data: {
+          filas,
+          jobsPendentes,
+          jobsAtivos,
+          jobsFalhos,
+          ultimosLogs,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error: any) {
+      reply.status(500).send({ error: error.message });
+    }
+  });
 }

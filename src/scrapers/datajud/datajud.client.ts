@@ -129,7 +129,7 @@ export class DatajudClient {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `APIKey ${this.apiKey}`,
+            Authorization: this.apiKey,
           },
           body: JSON.stringify(body),
         });

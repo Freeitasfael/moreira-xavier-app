@@ -1,11 +1,10 @@
 /**
  * Worker de Scraping — Sincronização automática de processos
  *
- * Responsável por:
- * - Buscar processos que precisam de atualização
- * - Consultar o DataJud e futuramente scrapers de tribunal
- * - Detectar novas movimentações
- * - Disparar cálculo de prazos e notificações
+ * Estratégia API-first:
+ * 1. DataJud (API REST do CNJ) — fonte principal
+ * 2. TJMG API (HTTP, sem Playwright) — complemento para MG
+ * 3. Eproc privado (Playwright) — fallback opcional, apenas se houver credenciais
  */
 
 import { prisma } from '../config/database.js';
@@ -15,6 +14,7 @@ import {
   parseProcessoDatajud,
   parseMovimentacoesDatajud,
 } from '../scrapers/datajud/datajud.parser.js';
+import { tjmgApiClient } from '../scrapers/tjmg/tjmg-api.client.js';
 import { randomDelay } from '../shared/utils/retry.js';
 import { env } from '../config/env.js';
 
@@ -212,20 +212,22 @@ async function processScrapingJob(job: Job<ScrapingJobData>): Promise<ScrapingRe
 
 /**
  * Processa um job de sincronização por OAB
+ * Usa o TJMG API Client (HTTP, sem Playwright) para buscar processos
  */
 async function processOabSyncJob(job: Job<OabSyncJobData>): Promise<number> {
   const { advogadoId, oabNumero, oabUf } = job.data;
-  console.log(`🔍 [OAB Sync] Iniciando busca para OAB ${oabNumero}/${oabUf}...`);
+  console.log(`🔍 [OAB Sync] Iniciando busca para OAB ${oabNumero}/${oabUf} via API HTTP...`);
 
-  const { tjmgConsultaPublica } = await import('../scrapers/tjmg/tjmg-consulta-publica.js');
-  
   try {
-    const cnjs = await tjmgConsultaPublica.buscarProcessosPorOab(oabNumero, oabUf);
+    // Usar o client HTTP leve em vez do Playwright pesado
+    const cnjs = await tjmgApiClient.buscarProcessosPorOab(oabNumero, oabUf);
     let novosCount = 0;
 
     for (const numeroCnj of cnjs) {
-      // Formatar CNJ
-      const cnjFormatado = numeroCnj.replace(/^(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})$/, '$1-$2.$3.$4.$5.$6');
+      // O TJMG API client já retorna CNJs formatados
+      const cnjFormatado = numeroCnj.includes('-') 
+        ? numeroCnj 
+        : numeroCnj.replace(/^(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})$/, '$1-$2.$3.$4.$5.$6');
       
       // Tentar encontrar o processo
       let processo = await prisma.processo.findUnique({

@@ -205,8 +205,10 @@ export class ProcessoService {
   }
 
   /**
-   * Sincroniza um processo com o DataJud
-   * Retorna as novas movimentações encontradas
+   * Sincroniza um processo — Estratégia API-first
+   * 1. DataJud (API REST) — fonte principal
+   * 2. TJMG API (HTTP) — complemento para processos MG
+   * 3. Eproc (Playwright) — fallback opcional se houver credenciais
    */
   async sincronizarProcesso(processoId: string): Promise<Movimentacao[]> {
     const processo = await prisma.processo.findUnique({
@@ -218,110 +220,110 @@ export class ProcessoService {
     }
 
     let dadosParsed: any = null;
-    let novasMovimentacoesCount = 0;
     const novasMovimentacoesArray: Movimentacao[] = [];
-    let usouScraperPrivado = false;
-    let totalMovimentacoes = 0;
+    let fonteUsada = 'NENHUMA';
 
-    const relacao = await prisma.processoAdvogado.findFirst({
-      where: { processoId },
-      select: { advogadoId: true }
-    });
+    // ── Camada 1: DataJud (API REST do CNJ) ──────────────────
+    try {
+      console.log(`🌐 [Sync] Consultando DataJud para ${processo.numeroCnj}...`);
+      const dadosDatajud = await datajudClient.consultarProcesso(
+        processo.numeroCnj,
+        processo.tribunal,
+      );
 
-    if (relacao && processo.tribunal === 'TJMG') {
-      const { authService } = await import('../auth/auth.service.js');
-      const credencial = await authService.obterCredencial(relacao.advogadoId, 'EPROC_TJMG');
+      if (dadosDatajud) {
+        dadosParsed = parseProcessoDatajud(dadosDatajud);
+        fonteUsada = 'DATAJUD';
 
-      if (credencial) {
-        console.log(`🔑 [Sync Manual] Credencial encontrada para ${processo.numeroCnj}. Usando scraper privado Eproc...`);
-        const { EprocTjmgPrivadoScraper } = await import('../../scrapers/eproc/eproc-tjmg-privado.js');
-        const scraper = new EprocTjmgPrivadoScraper(credencial.login, credencial.senha);
-        
-        const resultado = await scraper.buscarProcessoLogado(processo.numeroCnj);
-        
-        if (resultado.sucesso && resultado.dados) {
-          dadosParsed = resultado.dados;
-          usouScraperPrivado = true;
-          totalMovimentacoes = resultado.dados.movimentacoes.length;
-          
-          for (const mov of resultado.dados.movimentacoes) {
+        if (dadosDatajud.movimentos?.length) {
+          const movimentacoes = parseMovimentacoesDatajud(dadosDatajud.movimentos, processoId);
+          for (const mov of movimentacoes) {
             try {
-              const nova = await prisma.movimentacao.create({ 
+              const nova = await prisma.movimentacao.create({
+                data: mov as any,
+              });
+              novasMovimentacoesArray.push(nova);
+            } catch (error: any) {
+              // Ignora duplicatas (hash único)
+            }
+          }
+        }
+
+        console.log(`✅ [Sync] DataJud: ${novasMovimentacoesArray.length} nova(s) movimentação(ões)`);
+      }
+    } catch (error: any) {
+      console.warn(`⚠️ [Sync] DataJud falhou para ${processo.numeroCnj}: ${error.message}`);
+    }
+
+    // ── Camada 2: TJMG API HTTP (complemento para MG) ────────
+    if (!dadosParsed && processo.tribunal === 'TJMG') {
+      try {
+        console.log(`🔍 [Sync] Consultando TJMG API HTTP para ${processo.numeroCnj}...`);
+        const { tjmgApiClient } = await import('../../scrapers/tjmg/tjmg-api.client.js');
+        const dadosTjmg = await tjmgApiClient.consultarProcesso(processo.numeroCnj);
+
+        if (dadosTjmg) {
+          dadosParsed = dadosTjmg;
+          fonteUsada = 'TJMG_API';
+
+          for (const mov of dadosTjmg.movimentacoes) {
+            try {
+              const hashConteudo = `${processoId}-${mov.data.toISOString()}-${mov.descricao}`.substring(0, 255);
+              const nova = await prisma.movimentacao.create({
                 data: {
-                  ...(mov as any),
                   processoId,
-                  hashConteudo: `${processoId}-${mov.data.toISOString()}-${mov.descricao}`.substring(0, 255)
-                }
+                  data: mov.data,
+                  descricao: mov.descricao,
+                  tipo: mov.tipo as any,
+                  complemento: mov.complemento || null,
+                  fonte: 'EPROC_TJMG',
+                  hashConteudo,
+                },
               });
               novasMovimentacoesArray.push(nova);
             } catch (error: any) {
               // Ignora duplicatas
             }
           }
-        }
-      }
-    }
 
-    if (!usouScraperPrivado) {
-      // Consultar DataJud
-      let dadosDatajud = null;
-      try {
-        dadosDatajud = await datajudClient.consultarProcesso(
-          processo.numeroCnj,
-          processo.tribunal,
-        );
+          console.log(`✅ [Sync] TJMG API: ${novasMovimentacoesArray.length} nova(s) movimentação(ões)`);
+        }
       } catch (error: any) {
-        console.warn(`[DataJud] Erro no fallback: ${error.message}`);
-        throw new Error(`Falha na sincronização: A credencial do Eproc falhou/não existe e a API do DataJud retornou erro. Detalhes: ${error.message.substring(0, 100)}...`);
-      }
-
-      if (!dadosDatajud) {
-        // Atualizar timestamp mesmo sem dados
-        await prisma.processo.update({
-          where: { id: processoId },
-          data: {
-            ultimaVerif: new Date(),
-            proximaVerif: new Date(Date.now() + processo.intervaloVerif * 60 * 1000),
-          },
-        });
-        return [];
-      }
-      dadosParsed = parseProcessoDatajud(dadosDatajud);
-      
-      if (dadosDatajud.movimentos?.length) {
-        const movimentacoes = parseMovimentacoesDatajud(dadosDatajud.movimentos, processoId);
-        for (const mov of movimentacoes) {
-          try {
-            const nova = await prisma.movimentacao.create({
-              data: mov as any,
-            });
-            novasMovimentacoesArray.push(nova);
-          } catch (error: any) {
-             // ignora
-          }
-        }
+        console.warn(`⚠️ [Sync] TJMG API falhou: ${error.message}`);
       }
     }
 
-    // Atualizar dados do processo (Capa)
+    // ── Sem dados? Atualizar timestamp mesmo assim ────────────
+    if (!dadosParsed) {
+      await prisma.processo.update({
+        where: { id: processoId },
+        data: {
+          ultimaVerif: new Date(),
+          proximaVerif: new Date(Date.now() + processo.intervaloVerif * 60 * 1000),
+        },
+      });
+      return [];
+    }
+
+    // ── Atualizar capa do processo ───────────────────────────
     await prisma.processo.update({
       where: { id: processoId },
       data: {
-        classe: dadosParsed.classe,
-        assunto: dadosParsed.assunto,
-        comarca: dadosParsed.comarca,
-        vara: dadosParsed.vara,
-        parteAutora: dadosParsed.parteAutora,
-        parteRe: dadosParsed.parteRe,
-        valorCausa: dadosParsed.valorCausa,
-        numeroCnj: processo.numeroCnj, // Não sobrescrever
+        classe: dadosParsed.classe || processo.classe,
+        assunto: dadosParsed.assunto || processo.assunto,
+        comarca: dadosParsed.comarca || processo.comarca,
+        vara: dadosParsed.vara || processo.vara,
+        parteAutora: dadosParsed.parteAutora || processo.parteAutora,
+        parteRe: dadosParsed.parteRe || processo.parteRe,
+        valorCausa: dadosParsed.valorCausa || processo.valorCausa,
         ultimaVerif: new Date(),
         proximaVerif: new Date(Date.now() + processo.intervaloVerif * 60 * 1000),
+        status: 'ATIVO',
       },
     });
 
+    console.log(`✅ [Sync] ${processo.numeroCnj} sincronizado via ${fonteUsada}. ${novasMovimentacoesArray.length} nova(s).`);
     return novasMovimentacoesArray;
-
   }
 
   /**
