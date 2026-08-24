@@ -166,12 +166,15 @@ a:hover { color: var(--primary-color); }
 /* ─── LOGIN ──────────────────────────────────────────────── */
 
 #login-page {
-  display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
   position: relative;
   overflow: hidden;
+}
+
+#login-page.active {
+  display: flex;
 }
 
 .login-container {
