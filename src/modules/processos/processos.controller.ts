@@ -208,4 +208,54 @@ export async function processosController(app: FastifyInstance) {
       reply.status(500).send({ error: error.message });
     }
   });
+
+  // ─── GET /api/diagnostico — Verificação pública do DataJud ──
+  app.get('/api/diagnostico', async (_request, reply) => {
+    const { env } = await import('../../config/env.js');
+    const { datajudClient } = await import('../../scrapers/datajud/datajud.client.js');
+
+    const resultado: any = {
+      timestamp: new Date().toISOString(),
+      env: {
+        DATAJUD_API_KEY_presente: !!env.DATAJUD_API_KEY,
+        DATAJUD_API_KEY_prefixo: env.DATAJUD_API_KEY?.substring(0, 15) + '...',
+        DATAJUD_BASE_URL: env.DATAJUD_BASE_URL,
+        DATABASE_URL_presente: !!env.DATABASE_URL,
+        NODE_ENV: env.NODE_ENV,
+      },
+      datajud: { status: 'não testado' },
+    };
+
+    // Testar DataJud com um processo REAL que sabemos que existe
+    try {
+      const testCnj = '50149283620258130686'; // Processo conhecido no TJMG
+      const res = await fetch(`${env.DATAJUD_BASE_URL}/api_publica_tjmg/_search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: env.DATAJUD_API_KEY,
+        },
+        body: JSON.stringify({
+          query: { match: { numeroProcesso: testCnj } },
+          size: 1,
+        }),
+      });
+
+      const data = await res.json() as any;
+      resultado.datajud = {
+        status: res.ok ? 'OK' : `ERRO ${res.status}`,
+        httpStatus: res.status,
+        totalHits: data.hits?.total?.value ?? 0,
+        processoEncontrado: (data.hits?.hits?.length || 0) > 0,
+        classeExemplo: data.hits?.hits?.[0]?._source?.classe?.nome || null,
+      };
+    } catch (err: any) {
+      resultado.datajud = {
+        status: 'ERRO_CONEXAO',
+        erro: err.message,
+      };
+    }
+
+    reply.send(resultado);
+  });
 }
