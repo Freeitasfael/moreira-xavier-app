@@ -25,8 +25,9 @@ export class ProcessoService {
   /**
    * Cadastra um novo processo para acompanhamento.
    * Estratégia: DataJud → TJMG API → cadastro manual com sync agendada
+   * Retorna processo + metadados sobre a fonte de dados
    */
-  async cadastrarProcesso(advogadoId: string, numeroCnj: string): Promise<Processo> {
+  async cadastrarProcesso(advogadoId: string, numeroCnj: string): Promise<{ processo: Processo; fonte: string; movimentacoes: number }> {
     // Validar número CNJ
     const numeroFormatado = normalizeCnjNumber(numeroCnj);
 
@@ -35,11 +36,14 @@ export class ProcessoService {
       where: { numeroCnj: numeroFormatado },
     });
 
+    let fonteUsada = 'EXISTENTE';
+    let totalMovimentacoes = 0;
+
     if (!processo) {
       const tribunal = identificarTribunal(numeroFormatado);
       let dadosCapa: any = null;
       let movimentacoesRaw: any[] = [];
-      let fonteUsada = 'MANUAL';
+      fonteUsada = 'MANUAL';
 
       // ── Camada 1: DataJud ─────────────────────────────────
       try {
@@ -120,6 +124,7 @@ export class ProcessoService {
           }
         }
         console.log(`✅ [Cadastro] ${salvos}/${movimentacoes.length} movimentações salvas`);
+        totalMovimentacoes = salvos;
       }
 
       // ── Se não encontrou em nenhuma fonte, agendar sync ───
@@ -147,7 +152,7 @@ export class ProcessoService {
       });
     }
 
-    return processo;
+    return { processo, fonte: fonteUsada, movimentacoes: totalMovimentacoes };
   }
 
   /**

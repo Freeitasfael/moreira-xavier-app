@@ -15,12 +15,26 @@ export async function processosController(app: FastifyInstance) {
       const user = request.user as JwtPayload;
       const { numeroCnj } = cadastroSchema.parse(request.body);
 
-      const processo = await processoService.cadastrarProcesso(user.id, numeroCnj);
+      const { processo, fonte, movimentacoes } = await processoService.cadastrarProcesso(user.id, numeroCnj);
+
+      // Gerar mensagem adequada baseada na fonte de dados
+      let message: string;
+      if (fonte === 'EXISTENTE') {
+        message = 'Processo já cadastrado — vinculado ao seu perfil.';
+      } else if (fonte === 'DATAJUD') {
+        message = `Processo cadastrado com sucesso! ${movimentacoes} movimentação(ões) encontrada(s) no DataJud.`;
+      } else if (fonte === 'TJMG_API') {
+        message = 'Processo cadastrado com dados do TJMG.';
+      } else {
+        message = 'Processo cadastrado. Os dados serão sincronizados automaticamente em breve — esse processo pode não estar disponível no DataJud ainda.';
+      }
 
       reply.status(201).send({
         success: true,
         data: processo,
-        message: 'Processo cadastrado para acompanhamento',
+        fonte,
+        movimentacoes,
+        message,
       });
     } catch (error: any) {
       if (error.name === 'ZodError') {
