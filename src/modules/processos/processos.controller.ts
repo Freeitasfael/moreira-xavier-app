@@ -23,10 +23,8 @@ export async function processosController(app: FastifyInstance) {
         message = 'Processo já cadastrado — vinculado ao seu perfil.';
       } else if (fonte === 'DATAJUD') {
         message = `Processo cadastrado com sucesso! ${movimentacoes} movimentação(ões) encontrada(s) no DataJud.`;
-      } else if (fonte === 'TJMG_API') {
-        message = 'Processo cadastrado com dados do TJMG.';
       } else {
-        message = 'Processo cadastrado. Os dados serão sincronizados automaticamente em breve — esse processo pode não estar disponível no DataJud ainda.';
+        message = 'Processo cadastrado para acompanhamento. Os dados serão sincronizados automaticamente — esse processo pode não estar disponível no DataJud ainda.';
       }
 
       reply.status(201).send({

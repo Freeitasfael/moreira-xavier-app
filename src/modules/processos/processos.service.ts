@@ -62,34 +62,6 @@ export class ProcessoService {
         console.warn(`⚠️ [Cadastro] DataJud erro: ${error.message}`);
       }
 
-      // ── Camada 2: TJMG API HTTP (se DataJud não encontrou e é MG) ──
-      if (!dadosCapa && (tribunal === 'TJMG' || tribunal.includes('TJMG'))) {
-        try {
-          console.log(`🔍 [Cadastro] Tentando TJMG API HTTP para ${numeroFormatado}...`);
-          const { tjmgApiClient } = await import('../../scrapers/tjmg/tjmg-api.client.js');
-          const dadosTjmg = await tjmgApiClient.consultarProcesso(numeroFormatado);
-
-          if (dadosTjmg) {
-            dadosCapa = {
-              numeroCnj: numeroFormatado,
-              tribunal,
-              classe: dadosTjmg.classe || null,
-              assunto: dadosTjmg.assunto || null,
-              comarca: dadosTjmg.comarca || null,
-              vara: dadosTjmg.vara || null,
-              parteAutora: dadosTjmg.parteAutora || null,
-              parteRe: dadosTjmg.parteRe || null,
-              sistemaOrigem: 'EPROC_TJMG' as const,
-            };
-            fonteUsada = 'TJMG_API';
-            console.log(`✅ [Cadastro] TJMG API retornou dados: ${dadosTjmg.movimentacoes.length} movimentação(ões)`);
-          } else {
-            console.log(`⚠️ [Cadastro] TJMG API: processo não encontrado`);
-          }
-        } catch (error: any) {
-          console.warn(`⚠️ [Cadastro] TJMG API erro: ${error.message}`);
-        }
-      }
 
       // ── Criar processo no banco ───────────────────────────
       const dadosFinais = dadosCapa || {
@@ -305,43 +277,6 @@ export class ProcessoService {
       console.warn(`⚠️ [Sync] DataJud falhou para ${processo.numeroCnj}: ${error.message}`);
     }
 
-    // ── Camada 2: TJMG API HTTP (complemento para MG) ────────
-    if (!dadosParsed && processo.tribunal === 'TJMG') {
-      try {
-        console.log(`🔍 [Sync] Consultando TJMG API HTTP para ${processo.numeroCnj}...`);
-        const { tjmgApiClient } = await import('../../scrapers/tjmg/tjmg-api.client.js');
-        const dadosTjmg = await tjmgApiClient.consultarProcesso(processo.numeroCnj);
-
-        if (dadosTjmg) {
-          dadosParsed = dadosTjmg;
-          fonteUsada = 'TJMG_API';
-
-          for (const mov of dadosTjmg.movimentacoes) {
-            try {
-              const hashConteudo = `${processoId}-${mov.data.toISOString()}-${mov.descricao}`.substring(0, 255);
-              const nova = await prisma.movimentacao.create({
-                data: {
-                  processoId,
-                  data: mov.data,
-                  descricao: mov.descricao,
-                  tipo: mov.tipo as any,
-                  complemento: mov.complemento || null,
-                  fonte: 'EPROC_TJMG',
-                  hashConteudo,
-                },
-              });
-              novasMovimentacoesArray.push(nova);
-            } catch (error: any) {
-              // Ignora duplicatas
-            }
-          }
-
-          console.log(`✅ [Sync] TJMG API: ${novasMovimentacoesArray.length} nova(s) movimentação(ões)`);
-        }
-      } catch (error: any) {
-        console.warn(`⚠️ [Sync] TJMG API falhou: ${error.message}`);
-      }
-    }
 
     // ── Sem dados? Atualizar timestamp mesmo assim ────────────
     if (!dadosParsed) {

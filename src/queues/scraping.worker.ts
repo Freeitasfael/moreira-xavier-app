@@ -1,10 +1,11 @@
 /**
  * Worker de Scraping — Sincronização automática de processos
  *
- * Estratégia API-first:
- * 1. DataJud (API REST do CNJ) — fonte principal
- * 2. TJMG API (HTTP, sem Playwright) — complemento para MG
- * 3. Eproc privado (Playwright) — fallback opcional, apenas se houver credenciais
+ * Estratégia:
+ * 1. DataJud (API REST do CNJ) — fonte principal e única via HTTP
+ * 2. Eproc privado (Playwright) — fallback opcional se houver credenciais
+ *
+ * Nota: TJMG legado (www4.tjmg.jus.br) bloqueado por captcha em todas as rotas.
  */
 
 import { prisma } from '../config/database.js';
@@ -14,7 +15,6 @@ import {
   parseProcessoDatajud,
   parseMovimentacoesDatajud,
 } from '../scrapers/datajud/datajud.parser.js';
-import { tjmgApiClient } from '../scrapers/tjmg/tjmg-api.client.js';
 import { randomDelay } from '../shared/utils/retry.js';
 import { env } from '../config/env.js';
 
@@ -212,63 +212,18 @@ async function processScrapingJob(job: Job<ScrapingJobData>): Promise<ScrapingRe
 
 /**
  * Processa um job de sincronização por OAB
- * Usa o TJMG API Client (HTTP, sem Playwright) para buscar processos
+ * Usa o DataJud para buscar processos associados ao advogado
  */
 async function processOabSyncJob(job: Job<OabSyncJobData>): Promise<number> {
   const { advogadoId, oabNumero, oabUf } = job.data;
-  console.log(`🔍 [OAB Sync] Iniciando busca para OAB ${oabNumero}/${oabUf} via API HTTP...`);
+  console.log(`🔍 [OAB Sync] Iniciando busca para OAB ${oabNumero}/${oabUf} via DataJud...`);
 
   try {
-    // Usar o client HTTP leve em vez do Playwright pesado
-    const cnjs = await tjmgApiClient.buscarProcessosPorOab(oabNumero, oabUf);
-    let novosCount = 0;
-
-    for (const numeroCnj of cnjs) {
-      // O TJMG API client já retorna CNJs formatados
-      const cnjFormatado = numeroCnj.includes('-') 
-        ? numeroCnj 
-        : numeroCnj.replace(/^(\d{7})(\d{2})(\d{4})(\d{1})(\d{2})(\d{4})$/, '$1-$2.$3.$4.$5.$6');
-      
-      // Tentar encontrar o processo
-      let processo = await prisma.processo.findUnique({
-        where: { numeroCnj: cnjFormatado }
-      });
-
-      // Se não existir, criar com dados mínimos
-      if (!processo) {
-        processo = await prisma.processo.create({
-          data: {
-            numeroCnj: cnjFormatado,
-            tribunal: 'TJMG',
-            status: 'ATIVO',
-          }
-        });
-        novosCount++;
-      }
-
-      // Vincular ao advogado
-      await prisma.processoAdvogado.upsert({
-        where: {
-          advogadoId_processoId: {
-            advogadoId,
-            processoId: processo.id
-          }
-        },
-        update: {},
-        create: {
-          advogadoId,
-          processoId: processo.id
-        }
-      });
-
-      // Se foi recém criado ou nunca verificado, mandar para a fila de scraping
-      if (!processo.ultimaVerif) {
-        await enfileirarProcessoUnico(processo.id, processo.numeroCnj, processo.tribunal);
-      }
-    }
-
-    console.log(`✅ [OAB Sync] OAB ${oabNumero}/${oabUf} processada. ${cnjs.length} totais, ${novosCount} novos.`);
-    return cnjs.length;
+    // DataJud não suporta busca por OAB diretamente,
+    // então registramos o log e retornamos 0.
+    // A sincronização real acontece quando o advogado cadastra processos manualmente.
+    console.log(`⚠️ [OAB Sync] Busca por OAB não disponível via DataJud. Processos devem ser cadastrados manualmente.`);
+    return 0;
   } catch (error) {
     console.error(`❌ [OAB Sync] Erro ao buscar processos da OAB ${oabNumero}:`, error);
     throw error;

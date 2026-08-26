@@ -85,13 +85,24 @@ function gerarHashMovimentacao(mov: DatajudMovimentacao): string {
  * Converte dados do DataJud para o formato de inserção no banco
  */
 export function parseProcessoDatajud(raw: DatajudProcesso) {
+  // Extrair comarca do nome do órgão julgador
+  // Ex: "Vara de Família e de Sucessões e Ausências da Comarca de Teófilo Otôni"
+  //  → comarca: "Teófilo Otôni"
+  const nomeOrgao = raw.orgaoJulgador?.nome || '';
+  let comarca: string | null = null;
+  const comarcaMatch = nomeOrgao.match(/Comarca\s+(?:de\s+|d[aoe]\s+)?(.+?)$/i);
+  if (comarcaMatch) {
+    comarca = comarcaMatch[1].trim();
+  }
+
   return {
     numeroCnj: formatCnjNumber(raw.numeroProcesso),
     tribunal: raw.tribunal || '',
     instancia: raw.grau === 'G1' ? 1 : raw.grau === 'G2' ? 2 : 1,
     classe: raw.classe?.nome || null,
     assunto: raw.assuntos?.map((a) => a.nome).join('; ') || null,
-    vara: raw.orgaoJulgador?.nome || null,
+    vara: nomeOrgao || null,
+    comarca,
     sistemaOrigem: 'DATAJUD' as const,
   };
 }
