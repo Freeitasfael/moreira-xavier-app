@@ -573,26 +573,90 @@ async function verProcesso(id) {
           <span>Clique em "Sincronizar" para buscar movimentações</span>
         </div>`;
     } else {
-      timelineContainer.innerHTML = movs.map(m => {
+      timelineContainer.innerHTML = movs.map((m, idx) => {
         const tipo = (m.tipo || 'OUTROS').toUpperCase();
+        const tipoLabel = formatTipoMovimentacao(tipo);
         let dotClass = '';
         let iconName = 'file-text';
-        if (tipo.includes('SENTENCA')) { dotClass = 'dot-sentenca'; iconName = 'gavel'; }
-        else if (tipo.includes('DECISAO')) { dotClass = 'dot-decisao'; iconName = 'scale'; }
-        else if (tipo.includes('INTIMACAO')) { dotClass = 'dot-intimacao'; iconName = 'bell'; }
-        else if (tipo.includes('DESPACHO')) { iconName = 'pen-tool'; }
-        else if (tipo.includes('PETICAO') || tipo.includes('JUNTADA')) { iconName = 'file-plus'; }
+        let badgeClass = 'badge-outros';
+        if (tipo.includes('SENTENCA')) { dotClass = 'dot-sentenca'; iconName = 'gavel'; badgeClass = 'badge-sentenca'; }
+        else if (tipo.includes('DECISAO')) { dotClass = 'dot-decisao'; iconName = 'scale'; badgeClass = 'badge-decisao'; }
+        else if (tipo.includes('INTIMACAO')) { dotClass = 'dot-intimacao'; iconName = 'bell'; badgeClass = 'badge-intimacao'; }
+        else if (tipo.includes('CITACAO')) { dotClass = 'dot-intimacao'; iconName = 'mail'; badgeClass = 'badge-citacao'; }
+        else if (tipo.includes('DESPACHO')) { iconName = 'pen-tool'; badgeClass = 'badge-despacho'; }
+        else if (tipo.includes('PETICAO')) { iconName = 'file-plus'; badgeClass = 'badge-peticao'; }
+        else if (tipo.includes('JUNTADA')) { iconName = 'file-plus'; badgeClass = 'badge-juntada'; }
+        else if (tipo.includes('AUDIENCIA')) { iconName = 'users'; badgeClass = 'badge-audiencia'; }
+        else if (tipo.includes('DISTRIBUICAO')) { iconName = 'shuffle'; badgeClass = 'badge-distribuicao'; }
+        else if (tipo.includes('RECURSO') || tipo.includes('ACORDAO')) { iconName = 'book-open'; badgeClass = 'badge-recurso'; }
+        else if (tipo.includes('BAIXA')) { iconName = 'archive'; badgeClass = 'badge-baixa'; }
+        else if (tipo.includes('REMESSA')) { iconName = 'send'; badgeClass = 'badge-remessa'; }
+
+        const dataFormatada = formatDate(m.data);
+        const horaFormatada = formatTime(m.data);
+        const temComplemento = m.complemento && m.complemento.trim().length > 0;
+        const temCodigo = m.codigo != null;
+
+        // Parse complemento para exibição estruturada
+        let complementoHtml = '';
+        if (temComplemento) {
+          const complementos = m.complemento.split(';').map(c => c.trim()).filter(c => c.length > 0);
+          complementoHtml = complementos.map(c => {
+            const parts = c.split(':');
+            if (parts.length >= 2) {
+              const label = parts[0].trim().replace(/_/g, ' ');
+              const valor = parts.slice(1).join(':').trim().replace(/_/g, ' ');
+              return `
+                <div class="mov-detalhe-row">
+                  <span class="mov-detalhe-label">${capitalizeFirst(label)}</span>
+                  <span class="mov-detalhe-valor">${capitalizeFirst(valor)}</span>
+                </div>`;
+            }
+            return `<div class="mov-detalhe-row"><span class="mov-detalhe-valor">${capitalizeFirst(c.replace(/_/g, ' '))}</span></div>`;
+          }).join('');
+        }
 
         return `
-          <div class="timeline-full-item">
-            <div class="timeline-full-dot ${dotClass}">
-              <i data-lucide="${iconName}"></i>
+          <div class="mov-card ${idx === 0 ? 'mov-card-latest' : ''}" data-mov-id="${m.id}" onclick="toggleMovDetalhe(this)">
+            <div class="mov-card-header">
+              <div class="mov-card-icon ${dotClass}">
+                <i data-lucide="${iconName}"></i>
+              </div>
+              <div class="mov-card-info">
+                <div class="mov-card-title">${m.descricao}</div>
+                <div class="mov-card-meta">
+                  <span class="mov-badge ${badgeClass}">${tipoLabel}</span>
+                  <span class="mov-date"><i data-lucide="calendar" style="width:12px;height:12px"></i> ${dataFormatada}</span>
+                  ${horaFormatada ? `<span class="mov-time"><i data-lucide="clock" style="width:12px;height:12px"></i> ${horaFormatada}</span>` : ''}
+                </div>
+              </div>
+              <div class="mov-card-chevron">
+                <i data-lucide="chevron-down"></i>
+              </div>
             </div>
-            <div class="timeline-full-content">
-              <div class="timeline-full-desc">${m.descricao}</div>
-              <div class="timeline-full-meta">
-                <span><i data-lucide="calendar" style="width:12px;height:12px"></i> ${formatDate(m.data)}</span>
-                <span><i data-lucide="tag" style="width:12px;height:12px"></i> ${tipo}</span>
+            <div class="mov-card-details">
+              <div class="mov-details-inner">
+                ${temCodigo ? `
+                <div class="mov-detalhe-row">
+                  <span class="mov-detalhe-label">Código CNJ</span>
+                  <span class="mov-detalhe-valor mov-detalhe-code">${m.codigo}</span>
+                </div>` : ''}
+                <div class="mov-detalhe-row">
+                  <span class="mov-detalhe-label">Data/Hora</span>
+                  <span class="mov-detalhe-valor">${dataFormatada}${horaFormatada ? ' às ' + horaFormatada : ''}</span>
+                </div>
+                <div class="mov-detalhe-row">
+                  <span class="mov-detalhe-label">Tipo</span>
+                  <span class="mov-detalhe-valor">${tipoLabel}</span>
+                </div>
+                <div class="mov-detalhe-row">
+                  <span class="mov-detalhe-label">Fonte</span>
+                  <span class="mov-detalhe-valor">${formatFonte(m.fonte)}</span>
+                </div>
+                ${complementoHtml ? `
+                <div class="mov-detalhe-divider"></div>
+                <div class="mov-detalhe-section-title">Complementos</div>
+                ${complementoHtml}` : ''}
               </div>
             </div>
           </div>`;
@@ -661,6 +725,60 @@ function formatTimeAgo(dateStr) {
   if (diffH < 24) return `${diffH}h atrás`;
   if (diffD < 7) return `${diffD}d atrás`;
   return formatDate(dateStr);
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const h = date.getHours();
+  const m = date.getMinutes();
+  if (h === 0 && m === 0) return ''; // Midnight means no time info
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function formatTipoMovimentacao(tipo) {
+  const map = {
+    SENTENCA: 'Sentença',
+    DECISAO: 'Decisão',
+    DESPACHO: 'Despacho',
+    INTIMACAO: 'Intimação',
+    CITACAO: 'Citação',
+    PETICAO: 'Petição',
+    JUNTADA: 'Juntada',
+    AUDIENCIA: 'Audiência',
+    DISTRIBUICAO: 'Distribuição',
+    RECURSO: 'Recurso',
+    BAIXA: 'Baixa/Arquivamento',
+    REMESSA: 'Remessa',
+    ACORDAO: 'Acórdão',
+    OUTROS: 'Outros',
+  };
+  return map[tipo] || tipo;
+}
+
+function formatFonte(fonte) {
+  const map = {
+    DATAJUD: 'DataJud (CNJ)',
+    EPROC_TJMG: 'TJMG - PJe/Eproc',
+    MANUAL: 'Cadastro Manual',
+    DJEN: 'Diário da Justiça',
+  };
+  return map[fonte] || fonte || 'N/A';
+}
+
+function capitalizeFirst(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+function toggleMovDetalhe(el) {
+  const isOpen = el.classList.contains('mov-card-open');
+  // Close all others
+  document.querySelectorAll('.mov-card-open').forEach(card => {
+    if (card !== el) card.classList.remove('mov-card-open');
+  });
+  // Toggle this one
+  el.classList.toggle('mov-card-open', !isOpen);
 }
 
 // ─── Event Listeners ────────────────────────────────────────
