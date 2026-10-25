@@ -15,13 +15,24 @@ if (env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-export async function connectDatabase(): Promise<void> {
-  try {
-    await prisma.$connect();
-    console.log('✅ Banco de dados conectado');
-  } catch (error) {
-    console.error('❌ Erro ao conectar no banco de dados:', error);
-    process.exit(1);
+export async function connectDatabase(maxTentativas = 8, delayMs = 5000): Promise<void> {
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    try {
+      await prisma.$connect();
+      console.log('✅ Banco de dados conectado com sucesso');
+      return;
+    } catch (error: any) {
+      console.warn(`⚠️ Tentativa ${tentativa}/${maxTentativas} de conexão com o banco falhou: ${error.message}`);
+      if (tentativa === maxTentativas) {
+        console.error('❌ Não foi possível conectar ao banco de dados após várias tentativas.');
+        // Em produção, não matar o processo se quisermos que o Render continue servindo o health check
+        if (env.NODE_ENV === 'development') {
+          process.exit(1);
+        }
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 }
 

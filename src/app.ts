@@ -13,6 +13,7 @@ import { authController } from './modules/auth/auth.controller.js';
 import { processosController } from './modules/processos/processos.controller.js';
 import { prazosController } from './modules/prazos/prazos.controller.js';
 import { notificacoesController } from './modules/notificacoes/notificacoes.controller.js';
+import { prisma } from './config/database.js';
 import { getAllQueuesStats, dispararSyncImediata, enfileirarProcessoUnico } from './queues/index.js';
 import { authGuard } from './modules/auth/auth.controller.js';
 import type { JwtPayload } from './modules/auth/auth.types.js';
@@ -104,13 +105,23 @@ export async function buildApp() {
 
   // ─── Health Check ──────────────────────────────────────────
 
-  app.get('/api/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    version: '1.0.0',
-    queues: getAllQueuesStats(),
-  }));
+  app.get('/api/health', async () => {
+    let dbStatus = 'ok';
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch (err: any) {
+      dbStatus = `indisponivel: ${err.message}`;
+    }
+
+    return {
+      status: 'ok',
+      database: dbStatus,
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: '1.0.0',
+      queues: getAllQueuesStats(),
+    };
+  });
 
   // ─── Rota catch-all para SPA ──────────────────────────────
 
