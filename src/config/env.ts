@@ -8,6 +8,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  APP_URL: z.string().default('http://localhost:3000'),
 
   // Banco de Dados
   DATABASE_URL: z.string().url(),

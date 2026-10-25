@@ -95,6 +95,38 @@ export function parseProcessoDatajud(raw: DatajudProcesso) {
     comarca = comarcaMatch[1].trim();
   }
 
+  // Extrair partes (polos) se disponíveis
+  let parteAutora: string | null = null;
+  let parteRe: string | null = null;
+  let valorCausa: number | null = null;
+
+  const rawAny = raw as any;
+  const polos = rawAny.polos || rawAny.polo || rawAny.dadosBasicos?.polo;
+  if (Array.isArray(polos)) {
+    for (const p of polos) {
+      const poloTipo = (p.polo || p.tipo || '').toUpperCase();
+      const partes = p.parte || p.partes || [];
+      const partesArray = Array.isArray(partes) ? partes : [partes];
+      const nomes = partesArray
+        .map((pt: any) => pt.pessoa?.nome || pt.nome)
+        .filter(Boolean)
+        .join(', ');
+
+      if (nomes) {
+        if (poloTipo === 'AT' || poloTipo === 'ATIVO' || poloTipo.includes('AUTOR')) {
+          parteAutora = nomes;
+        } else if (poloTipo === 'PA' || poloTipo === 'PASSIVO' || poloTipo.includes('REU')) {
+          parteRe = nomes;
+        }
+      }
+    }
+  }
+
+  if (rawAny.valorCausa || rawAny.dadosBasicos?.valorCausa) {
+    const val = parseFloat(rawAny.valorCausa || rawAny.dadosBasicos?.valorCausa);
+    if (!isNaN(val)) valorCausa = val;
+  }
+
   return {
     numeroCnj: formatCnjNumber(raw.numeroProcesso),
     tribunal: raw.tribunal || '',
@@ -103,6 +135,9 @@ export function parseProcessoDatajud(raw: DatajudProcesso) {
     assunto: raw.assuntos?.map((a) => a.nome).join('; ') || null,
     vara: nomeOrgao || null,
     comarca,
+    parteAutora,
+    parteRe,
+    valorCausa,
     sistemaOrigem: 'DATAJUD' as const,
   };
 }

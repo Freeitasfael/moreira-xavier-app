@@ -11,6 +11,7 @@
 import { prisma } from '../config/database.js';
 import { getQueue, type Job } from './task-queue.js';
 import { formatarData } from '../shared/utils/date-utils.js';
+import { env } from '../config/env.js';
 import {
   enviarEmail,
   isEmailConfigured,
@@ -87,7 +88,7 @@ async function processNotificacaoJob(job: Job<NotificacaoJobData>): Promise<void
         try {
           const advogado = await prisma.advogado.findUnique({ where: { id: advId } });
           if (advogado?.email) {
-            const dashboardUrl = `http://localhost:3000`;
+            const dashboardUrl = env.APP_URL;
             let html = '';
 
             if (tipo === 'NOVA_MOVIMENTACAO') {

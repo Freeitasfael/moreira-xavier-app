@@ -14,6 +14,7 @@ import { enfileirarVerificacaoPrazos } from './prazos.worker.js';
 import { gerarResumoDiario } from './notificacoes.worker.js';
 import { getAllQueuesStats } from './task-queue.js';
 import { prisma } from '../config/database.js';
+import { env } from '../config/env.js';
 
 // ─── Cron Jobs ──────────────────────────────────────────────
 
@@ -129,6 +130,23 @@ export function iniciarCronJobs(): void {
     }
   }, { timezone: 'America/Sao_Paulo' });
   jobs.push(cleanupJob);
+
+  // ── Keep-Alive: a cada 10 minutos (Render Free Tier) ───────
+  const targetUrl = env.APP_URL.includes('onrender.com')
+    ? `${env.APP_URL.replace(/\/$/, '')}/api/health`
+    : 'https://moreira-xavier-app.onrender.com/api/health';
+
+  const keepAliveJob = cron.schedule('*/10 * * * *', async () => {
+    try {
+      const res = await fetch(targetUrl);
+      if (res.ok) {
+        console.log('💓 [Keep-Alive] Ping enviado com sucesso para manter o servidor ativo');
+      }
+    } catch (error: any) {
+      console.warn(`⚠️ [Keep-Alive] Falha ao enviar ping: ${error.message}`);
+    }
+  });
+  jobs.push(keepAliveJob);
 
   console.log('  ├─ 🔄 Sincronização de processos: a cada 6 horas');
   console.log('  ├─ 📅 Verificação de prazos: a cada 30 minutos');

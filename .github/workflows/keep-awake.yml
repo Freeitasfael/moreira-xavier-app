@@ -1,0 +1,17 @@
+name: Keep Render Service Awake
+
+on:
+  schedule:
+    # Executa a cada 14 minutos (o Render entra em modo sleep após 15 minutos de inatividade)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Permite disparo manual
+
+jobs:
+  ping:
+    name: Ping Health Endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Moreira & Xavier App no Render
+        run: |
+          response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" "https://moreira-xavier-app.onrender.com/api/health")
+          echo "$response"
