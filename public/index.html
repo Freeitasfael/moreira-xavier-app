@@ -173,6 +173,10 @@
             <span>Prazos</span>
             <span id="badge-prazos" class="nav-badge hidden">0</span>
           </button>
+          <button class="nav-item" data-section="calculadora" id="nav-calculadora">
+            <i data-lucide="calculator"></i>
+            <span>Calculadora CPC</span>
+          </button>
           <button class="nav-item" data-section="notificacoes" id="nav-notificacoes">
             <i data-lucide="bell"></i>
             <span>Notificações</span>
@@ -201,62 +205,172 @@
 
       <!-- Content -->
       <main class="main-content">
+        <!-- ─── Topbar Global ────────────────────────────── -->
+        <header class="app-topbar">
+          <div class="topbar-search-wrapper">
+            <button class="topbar-search-trigger" id="btn-trigger-cmd">
+              <i data-lucide="search"></i>
+              <span class="search-placeholder">Buscar processo, cliente, OAB ou comando...</span>
+              <kbd class="shortcut-badge"><abbr title="Control">Ctrl</abbr> K</kbd>
+            </button>
+          </div>
+
+          <div class="topbar-actions">
+            <div class="topbar-status-chip" title="Conexão com DataJud CNJ e Supabase ativa">
+              <span class="status-pulse-dot"></span>
+              <span class="status-chip-label">DataJud 24/7</span>
+            </div>
+            
+            <button id="btn-topbar-calc" class="btn btn-sm btn-outline">
+              <i data-lucide="calculator"></i>
+              <span>Simular Prazo</span>
+            </button>
+
+            <button id="btn-topbar-novo" class="btn btn-sm btn-primary">
+              <i data-lucide="plus"></i>
+              <span>Novo Processo</span>
+            </button>
+          </div>
+        </header>
+
         <!-- ─── Seção Dashboard ──────────────────────────── -->
         <section id="section-dashboard" class="section active">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title" id="dashboard-greeting">Bom dia</h2>
-              <p class="section-subtitle">Aqui está o resumo dos seus processos</p>
+          <!-- Hero Card com resumo executivo -->
+          <div class="dashboard-hero-card">
+            <div class="hero-content">
+              <div class="hero-badge"><i data-lucide="shield-check" style="width:14px;height:14px;"></i> Monitoramento Processual Contínuo</div>
+              <h2 class="hero-title" id="dashboard-hero-greeting">Bom dia, Dr. Rafael</h2>
+              <p class="hero-subtitle">Seus processos judiciais e prazos CPC estão sincronizados em tempo real diretamente com o CNJ DataJud.</p>
+              
+              <div class="hero-meta-row">
+                <div class="hero-meta-item">
+                  <span class="hero-meta-label">Data de Hoje</span>
+                  <span class="hero-meta-val" id="hero-date-today">24 de Outubro</span>
+                </div>
+                <div class="hero-meta-item">
+                  <span class="hero-meta-label">Tribunais Cobertos</span>
+                  <span class="hero-meta-val">TJMG · TRF · TRT · STJ</span>
+                </div>
+                <div class="hero-meta-item">
+                  <span class="hero-meta-label">Status da Sincronização</span>
+                  <span class="hero-meta-val text-success">🟢 Operacional</span>
+                </div>
+              </div>
             </div>
-            <button id="btn-novo-processo" class="btn btn-primary">
-              <i data-lucide="plus"></i>
-              Novo Processo
-            </button>
+
+            <div class="hero-actions">
+              <button class="btn btn-glass" id="hero-btn-calc">
+                <i data-lucide="calendar"></i>
+                Calculadora CPC
+              </button>
+              <button class="btn btn-glass" id="hero-btn-pauta">
+                <i data-lucide="printer"></i>
+                Imprimir Pauta
+              </button>
+            </div>
           </div>
 
           <!-- Stats Cards -->
           <div class="stats-grid">
-            <div class="stat-card stat-card-blue">
+            <div class="stat-card stat-card-blue" onclick="showSection('processos')">
               <div class="stat-icon"><i data-lucide="briefcase"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-total">0</span>
-                <span class="stat-label">Processos</span>
+                <span class="stat-label">Processos Ativos</span>
               </div>
+              <div class="stat-badge">Ver todos</div>
             </div>
-            <div class="stat-card stat-card-green">
+            <div class="stat-card stat-card-green" onclick="filtrarProcessosRapido('ATIVO')">
               <div class="stat-icon"><i data-lucide="activity"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-ativos">0</span>
-                <span class="stat-label">Em andamento</span>
+                <span class="stat-label">Em Andamento</span>
               </div>
+              <div class="stat-badge">Sincronizados</div>
             </div>
-            <div class="stat-card stat-card-orange">
+            <div class="stat-card stat-card-orange" onclick="showSection('prazos')">
               <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-urgentes">0</span>
-                <span class="stat-label">Prazos urgentes</span>
+                <span class="stat-label">Prazos Críticos</span>
               </div>
+              <div class="stat-badge stat-badge-pulse">Atenção</div>
             </div>
-            <div class="stat-card stat-card-purple">
+            <div class="stat-card stat-card-purple" onclick="showSection('prazos')">
               <div class="stat-icon"><i data-lucide="calendar-clock"></i></div>
               <div class="stat-info">
                 <span class="stat-value" id="stat-proximos">0</span>
-                <span class="stat-label">Prazos esta semana</span>
+                <span class="stat-label">Prazos na Semana</span>
               </div>
+              <div class="stat-badge">CPC</div>
             </div>
           </div>
 
-          <!-- Prazos Urgentes -->
-          <div class="card">
-            <div class="card-header">
-              <h3><i data-lucide="alert-triangle"></i> Prazos Urgentes</h3>
+          <!-- Dual Section Grid: Prazos e Distribuição -->
+          <div class="dashboard-dual-grid">
+            <!-- Prazos Urgentes -->
+            <div class="card card-dashboard-prazos">
+              <div class="card-header">
+                <div class="card-header-title">
+                  <div class="card-header-icon orange"><i data-lucide="alert-triangle"></i></div>
+                  <div>
+                    <h3>Prazos Urgentes & Fatais</h3>
+                    <span class="card-header-desc">Atenção prioritária nos próximos dias úteis</span>
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-ghost" onclick="showSection('prazos')">Ver todos</button>
+              </div>
+              <div class="card-body">
+                <div id="prazos-urgentes-list" class="prazos-list">
+                  <div class="empty-state">
+                    <i data-lucide="check-circle"></i>
+                    <p>Tudo em dia!</p>
+                    <span>Nenhum prazo urgente no momento</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="card-body">
-              <div id="prazos-urgentes-list" class="prazos-list">
-                <div class="empty-state">
-                  <i data-lucide="check-circle"></i>
-                  <p>Tudo em dia!</p>
-                  <span>Nenhum prazo urgente no momento</span>
+
+            <!-- Radar Processual por Tribunal -->
+            <div class="card card-dashboard-radar">
+              <div class="card-header">
+                <div class="card-header-title">
+                  <div class="card-header-icon purple"><i data-lucide="bar-chart-2"></i></div>
+                  <div>
+                    <h3>Distribuição por Tribunal</h3>
+                    <span class="card-header-desc">Volume processual por esfera de justiça</span>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="tribunal-bars-container" id="tribunal-bars-list">
+                  <div class="tribunal-bar-item">
+                    <div class="tribunal-bar-header">
+                      <span>TJMG (Justiça Estadual)</span>
+                      <strong id="bar-tjmg-count">0</strong>
+                    </div>
+                    <div class="tribunal-bar-track">
+                      <div class="tribunal-bar-fill fill-blue" id="bar-tjmg-fill" style="width: 0%"></div>
+                    </div>
+                  </div>
+                  <div class="tribunal-bar-item">
+                    <div class="tribunal-bar-header">
+                      <span>TRF (Justiça Federal)</span>
+                      <strong id="bar-trf-count">0</strong>
+                    </div>
+                    <div class="tribunal-bar-track">
+                      <div class="tribunal-bar-fill fill-purple" id="bar-trf-fill" style="width: 0%"></div>
+                    </div>
+                  </div>
+                  <div class="tribunal-bar-item">
+                    <div class="tribunal-bar-header">
+                      <span>TRT (Justiça do Trabalho)</span>
+                      <strong id="bar-trt-count">0</strong>
+                    </div>
+                    <div class="tribunal-bar-track">
+                      <div class="tribunal-bar-fill fill-green" id="bar-trt-fill" style="width: 0%"></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -265,7 +379,13 @@
           <!-- Últimas Movimentações -->
           <div class="card">
             <div class="card-header">
-              <h3><i data-lucide="activity"></i> Últimas Movimentações</h3>
+              <div class="card-header-title">
+                <div class="card-header-icon blue"><i data-lucide="activity"></i></div>
+                <div>
+                  <h3>Últimas Movimentações Processuais</h3>
+                  <span class="card-header-desc">Histórico em tempo real sincronizado via CNJ DataJud</span>
+                </div>
+              </div>
             </div>
             <div class="card-body">
               <div id="ultimas-movimentacoes" class="timeline">
@@ -282,13 +402,25 @@
         <section id="section-processos" class="section">
           <div class="section-header">
             <div>
-              <h2 class="section-title">Processos</h2>
-              <p class="section-subtitle">Gerencie seus processos judiciais</p>
+              <h2 class="section-title">Acervo de Processos</h2>
+              <p class="section-subtitle">Gestão unificada com sincronização automática DataJud</p>
             </div>
-            <div style="display: flex; gap: 8px;">
-              <button id="btn-importar-oab" class="btn btn-outline" style="border-color: var(--primary-color); color: var(--primary-color);">
-                <i data-lucide="refresh-cw"></i>
-                Atualizar via OAB
+            <div class="section-header-actions">
+              <div class="view-toggle-group">
+                <button class="view-toggle-btn active" id="btn-view-cards" title="Visualização em Cards" onclick="alternarVisualizacaoProcessos('cards')">
+                  <i data-lucide="layout-grid"></i>
+                </button>
+                <button class="view-toggle-btn" id="btn-view-table" title="Visualização em Tabela" onclick="alternarVisualizacaoProcessos('table')">
+                  <i data-lucide="list"></i>
+                </button>
+              </div>
+              <button id="btn-exportar-csv" class="btn btn-outline" title="Exportar planilha CSV" onclick="exportarProcessosCSV()">
+                <i data-lucide="download"></i>
+                CSV
+              </button>
+              <button id="btn-imprimir-pauta" class="btn btn-outline" title="Imprimir pauta" onclick="imprimirRelatorioProcessos()">
+                <i data-lucide="printer"></i>
+                Imprimir
               </button>
               <button id="btn-novo-processo-2" class="btn btn-primary">
                 <i data-lucide="plus"></i>
@@ -301,22 +433,138 @@
           <div class="filters-bar">
             <div class="input-wrapper search-input">
               <i data-lucide="search" class="input-icon"></i>
-              <input type="text" id="processos-busca" placeholder="Buscar por número, parte, classe...">
+              <input type="text" id="processos-busca" placeholder="Buscar por número CNJ, autor, réu, vara, comarca...">
             </div>
             <select id="processos-status" class="select-filter">
               <option value="">Todos os status</option>
-              <option value="ATIVO">Ativos</option>
+              <option value="ATIVO">Em andamento</option>
               <option value="ARQUIVADO">Arquivados</option>
               <option value="SUSPENSO">Suspensos</option>
             </select>
           </div>
 
-          <!-- Lista de Processos -->
+          <!-- Quick Filter Pills -->
+          <div class="filter-pills-bar">
+            <button class="filter-pill active" data-pill="all" onclick="filtrarPorPill('all', this)">Todos</button>
+            <button class="filter-pill" data-pill="prazos" onclick="filtrarPorPill('prazos', this)"><i data-lucide="alert-triangle" style="width:12px;height:12px;"></i> Com Prazos</button>
+            <button class="filter-pill" data-pill="TJMG" onclick="filtrarPorPill('TJMG', this)">TJMG</button>
+            <button class="filter-pill" data-pill="TRF" onclick="filtrarPorPill('TRF', this)">TRF</button>
+            <button class="filter-pill" data-pill="TRT" onclick="filtrarPorPill('TRT', this)">TRT</button>
+            <button class="filter-pill" data-pill="ATIVO" onclick="filtrarPorPill('ATIVO', this)">Ativos</button>
+          </div>
+
+          <!-- Lista de Processos em Cards -->
           <div id="processos-list" class="processos-grid">
             <div class="empty-state">
               <i data-lucide="briefcase"></i>
               <p>Nenhum processo vinculado</p>
               <span>Adicione um processo pelo número CNJ ou sincronize pela sua OAB</span>
+            </div>
+          </div>
+
+          <!-- Tabela de Processos (Oculta inicialmente) -->
+          <div id="processos-table-container" class="processos-table-wrapper hidden">
+            <table class="data-table" id="processos-table">
+              <thead>
+                <tr>
+                  <th>Processo (CNJ)</th>
+                  <th>Partes (Autor / Réu)</th>
+                  <th>Tribunal / Comarca</th>
+                  <th>Última Movimentação</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="processos-table-body">
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ─── Seção Calculadora CPC ────────────────────── -->
+        <section id="section-calculadora" class="section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Calculadora de Prazos Processuais</h2>
+              <p class="section-subtitle">Simulador oficial conforme Art. 219 e 224 do CPC (Dias Úteis & Recesso Forense)</p>
+            </div>
+          </div>
+
+          <div class="calculadora-grid">
+            <!-- Formulário da Calculadora -->
+            <div class="card card-calc-input">
+              <div class="card-header">
+                <h3><i data-lucide="calculator"></i> Parâmetros do Prazo</h3>
+              </div>
+              <div class="card-body">
+                <form id="form-calculadora" onsubmit="event.preventDefault(); calcularPrazoInterativo();">
+                  <div class="form-group">
+                    <label for="calc-tipo">Tipo de Ato / Recurso</label>
+                    <select id="calc-tipo" class="select-field" onchange="atualizarDiasTipo(this.value)">
+                      <option value="APELACAO" data-dias="15">Apelação Cível (15 dias úteis - Art. 1.003)</option>
+                      <option value="AGRAVO" data-dias="15">Agravo de Instrumento (15 dias úteis - Art. 1.003)</option>
+                      <option value="CONTESTACAO" data-dias="15">Contestação (15 dias úteis - Art. 335)</option>
+                      <option value="REPLICA" data-dias="15">Réplica / Manifestação sobre Contestação (15 dias úteis)</option>
+                      <option value="MANIFESTACAO" data-dias="15" selected>Manifestação Geral / Intimação (15 dias úteis - Art. 218)</option>
+                      <option value="EMBARGOS" data-dias="5">Embargos de Declaração (5 dias úteis - Art. 1.023)</option>
+                      <option value="DESPACHO" data-dias="5">Cumprimento de Despacho (5 dias úteis - Art. 218, §3º)</option>
+                      <option value="CUSTOM" data-dias="10">Prazo Personalizado (Definir dias)</option>
+                    </select>
+                  </div>
+
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="calc-dias">Dias Úteis</label>
+                      <input type="number" id="calc-dias" value="15" min="1" max="180" class="input-field" required>
+                    </div>
+                    <div class="form-group">
+                      <label for="calc-data-intima">Data da Disponibilização / DJEN</label>
+                      <input type="date" id="calc-data-intima" class="input-field" required>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="calc-descricao">Descrição do Prazo (Opcional)</label>
+                    <input type="text" id="calc-descricao" placeholder="Ex: Apelação em face da sentença de mérito" class="input-field">
+                  </div>
+
+                  <button type="submit" class="btn btn-primary btn-full">
+                    <i data-lucide="check-circle"></i>
+                    Calcular Data Fatal
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Resultado do Cálculo -->
+            <div class="card card-calc-result" id="calc-result-box">
+              <div class="card-header">
+                <h3><i data-lucide="calendar-check"></i> Resultado do Cálculo</h3>
+                <span class="badge badge-success" id="calc-status-badge">Pronto</span>
+              </div>
+              <div class="card-body">
+                <div class="calc-highlight-box">
+                  <span class="calc-highlight-label">DATA FATAL (TERMO FINAL)</span>
+                  <div class="calc-highlight-val" id="calc-vencimento-display">Selecione uma data</div>
+                  <div class="calc-highlight-countdown" id="calc-countdown-display">—</div>
+                </div>
+
+                <div class="calc-timeline-breakdown" id="calc-breakdown-list">
+                  <div class="calc-step">
+                    <div class="calc-step-icon"><i data-lucide="info"></i></div>
+                    <div class="calc-step-content">
+                      <strong>Selecione a data inicial acima</strong>
+                      <span>O cálculo considera automaticamente Art. 219 CPC (dias úteis), feriados nacionais e o recesso forense (20/dez a 20/jan).</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="calc-actions" id="calc-actions-row" style="margin-top: 16px; display: none;">
+                  <button class="btn btn-outline btn-full" onclick="imprimirCertidaoPrazo()">
+                    <i data-lucide="printer"></i> Imprimir Memória de Cálculo
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -396,96 +644,220 @@
         <section id="section-processo-detalhe" class="section">
           <div class="section-header">
             <div style="display: flex; align-items: center; gap: 12px;">
-              <button class="btn btn-ghost btn-icon" onclick="showSection('processos')" title="Voltar">
+              <button class="btn btn-ghost btn-icon" onclick="showSection('processos')" title="Voltar ao acervo">
                 <i data-lucide="arrow-left"></i>
               </button>
               <div>
-                <h2 class="section-title" id="detalhe-cnj">Processo</h2>
-                <p class="section-subtitle" id="detalhe-classe">Carregando...</p>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <h2 class="section-title" id="detalhe-cnj">Processo</h2>
+                  <span class="processo-status" id="detalhe-status-badge">ATIVO</span>
+                </div>
+                <p class="section-subtitle" id="detalhe-classe">Carregando dados do processo...</p>
               </div>
             </div>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary" id="btn-sync-detalhe">
+            <div class="section-header-actions">
+              <button class="btn btn-outline btn-sm" id="btn-copiar-cnj" onclick="copiarCnjAtual()" title="Copiar número CNJ">
+                <i data-lucide="copy"></i>
+                Copiar CNJ
+              </button>
+              <button class="btn btn-outline btn-sm" id="btn-abrir-tribunal" onclick="abrirTribunalAtual()" title="Abrir consulta nos autos do tribunal">
+                <i data-lucide="external-link"></i>
+                Abrir Autos
+              </button>
+              <button class="btn btn-primary btn-sm" id="btn-sync-detalhe">
                 <i data-lucide="refresh-cw"></i>
                 Sincronizar
               </button>
-              <span class="processo-status" id="detalhe-status-badge">ATIVO</span>
             </div>
           </div>
 
-          <!-- Dados da Capa -->
-          <div class="detalhe-grid">
-            <div class="card detalhe-capa">
-              <div class="card-header"><h3><i data-lucide="file-text"></i> Dados do Processo</h3></div>
-              <div class="card-body">
-                <div class="detalhe-field-grid" id="detalhe-capa-fields">
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Tribunal</span>
-                    <span class="detalhe-value" id="detalhe-tribunal">—</span>
+          <!-- Abas de Navegação Interna -->
+          <div class="processo-subtabs">
+            <button class="subtab-btn active" data-subtab="capa" onclick="alternarSubtabProcesso('capa', this)">
+              <i data-lucide="file-text"></i> Capa & Partes
+            </button>
+            <button class="subtab-btn" data-subtab="movs" onclick="alternarSubtabProcesso('movs', this)">
+              <i data-lucide="activity"></i> Movimentações <span class="badge" id="detalhe-mov-tab-badge">0</span>
+            </button>
+            <button class="subtab-btn" data-subtab="prazos" onclick="alternarSubtabProcesso('prazos', this)">
+              <i data-lucide="clock"></i> Prazos & Audiências <span class="badge" id="detalhe-prazos-tab-badge">0</span>
+            </button>
+            <button class="subtab-btn" data-subtab="notas" onclick="alternarSubtabProcesso('notas', this)">
+              <i data-lucide="edit-3"></i> Notas do Escritório
+            </button>
+          </div>
+
+          <!-- Subtab 1: Capa & Partes -->
+          <div class="subtab-content active" id="subtab-capa">
+            <div class="detalhe-grid">
+              <div class="card detalhe-capa">
+                <div class="card-header">
+                  <div class="card-header-title">
+                    <div class="card-header-icon blue"><i data-lucide="file-text"></i></div>
+                    <h3>Capa Processual & Jurisdição</h3>
                   </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Vara / Órgão Julgador</span>
-                    <span class="detalhe-value" id="detalhe-vara">—</span>
+                </div>
+                <div class="card-body">
+                  <div class="detalhe-field-grid" id="detalhe-capa-fields">
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Tribunal</span>
+                      <span class="detalhe-value font-mono" id="detalhe-tribunal">—</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Instância / Grau</span>
+                      <span class="detalhe-value" id="detalhe-instancia">1º Grau</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Vara / Órgão Julgador</span>
+                      <span class="detalhe-value" id="detalhe-vara">—</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Comarca</span>
+                      <span class="detalhe-value" id="detalhe-comarca">—</span>
+                    </div>
+                    <div class="detalhe-field full-width">
+                      <span class="detalhe-label">Assunto Principal</span>
+                      <span class="detalhe-value" id="detalhe-assunto">—</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Parte Autora (Polo Ativo)</span>
+                      <span class="detalhe-value font-semibold text-primary" id="detalhe-autor">—</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Parte Ré (Polo Passivo)</span>
+                      <span class="detalhe-value font-semibold" id="detalhe-reu">—</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Valor da Causa</span>
+                      <span class="detalhe-value font-mono" id="detalhe-valor">—</span>
+                    </div>
+                    <div class="detalhe-field">
+                      <span class="detalhe-label">Última Sincronização CNJ</span>
+                      <span class="detalhe-value" id="detalhe-ultima-verif">—</span>
+                    </div>
                   </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Assunto</span>
-                    <span class="detalhe-value" id="detalhe-assunto">—</span>
+                </div>
+              </div>
+
+              <!-- Card Lateral Resumo Rápido -->
+              <div class="card detalhe-prazos">
+                <div class="card-header">
+                  <div class="card-header-title">
+                    <div class="card-header-icon orange"><i data-lucide="clock"></i></div>
+                    <h3>Prazos Pendentes</h3>
                   </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Comarca</span>
-                    <span class="detalhe-value" id="detalhe-comarca">—</span>
-                  </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Parte Autora</span>
-                    <span class="detalhe-value" id="detalhe-autor">—</span>
-                  </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Parte Ré</span>
-                    <span class="detalhe-value" id="detalhe-reu">—</span>
-                  </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Valor da Causa</span>
-                    <span class="detalhe-value" id="detalhe-valor">—</span>
-                  </div>
-                  <div class="detalhe-field">
-                    <span class="detalhe-label">Última Verificação</span>
-                    <span class="detalhe-value" id="detalhe-ultima-verif">—</span>
+                </div>
+                <div class="card-body">
+                  <div id="detalhe-prazos-list" class="prazos-list">
+                    <div class="empty-state small">
+                      <i data-lucide="calendar-check"></i>
+                      <p>Nenhum prazo vinculado</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- Prazos do Processo -->
-            <div class="card detalhe-prazos">
-              <div class="card-header"><h3><i data-lucide="clock"></i> Prazos</h3></div>
+          <!-- Subtab 2: Movimentações com Busca Interna -->
+          <div class="subtab-content" id="subtab-movs">
+            <div class="card detalhe-movimentacoes">
+              <div class="card-header">
+                <div class="card-header-title">
+                  <div class="card-header-icon blue"><i data-lucide="activity"></i></div>
+                  <div>
+                    <h3>Linha do Tempo de Movimentações</h3>
+                    <span class="card-header-desc">Registro oficial estruturado</span>
+                  </div>
+                </div>
+                <div class="mov-search-box">
+                  <i data-lucide="search"></i>
+                  <input type="text" id="input-busca-movs" placeholder="Filtrar por despacho, sentença, data..." oninput="filtrarMovimentacoesProcesso(this.value)">
+                </div>
+              </div>
               <div class="card-body">
-                <div id="detalhe-prazos-list" class="prazos-list">
-                  <div class="empty-state small">
+                <div id="detalhe-timeline" class="timeline-full">
+                  <div class="empty-state">
+                    <i data-lucide="inbox"></i>
+                    <p>Nenhuma movimentação registrada</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Subtab 3: Prazos Completos -->
+          <div class="subtab-content" id="subtab-prazos">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-header-title">
+                  <div class="card-header-icon orange"><i data-lucide="clock"></i></div>
+                  <div>
+                    <h3>Controle de Prazos deste Processo</h3>
+                    <span class="card-header-desc">Calculados pelo CPC ou adicionados manualmente</span>
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-outline" onclick="showSection('calculadora')">
+                  <i data-lucide="calculator"></i> Simular Novo Prazo
+                </button>
+              </div>
+              <div class="card-body">
+                <div id="detalhe-prazos-full-list" class="prazos-full-list">
+                  <div class="empty-state">
                     <i data-lucide="calendar-check"></i>
-                    <p>Nenhum prazo vinculado</p>
+                    <p>Nenhum prazo registrado para este processo</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Timeline de Movimentações -->
-          <div class="card detalhe-movimentacoes">
-            <div class="card-header">
-              <h3><i data-lucide="activity"></i> Movimentações</h3>
-              <span class="badge" id="detalhe-mov-count">0</span>
-            </div>
-            <div class="card-body">
-              <div id="detalhe-timeline" class="timeline-full">
-                <div class="empty-state">
-                  <i data-lucide="inbox"></i>
-                  <p>Nenhuma movimentação registrada</p>
+          <!-- Subtab 4: Notas Internas do Escritório -->
+          <div class="subtab-content" id="subtab-notas">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-header-title">
+                  <div class="card-header-icon purple"><i data-lucide="edit-3"></i></div>
+                  <div>
+                    <h3>Anotações Internas do Escritório</h3>
+                    <span class="card-header-desc">Estratégia jurídica, lembretes e observações sigilosas</span>
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="salvarNotaProcessoAtual()">
+                  <i data-lucide="save"></i> Salvar Nota
+                </button>
+              </div>
+              <div class="card-body">
+                <textarea id="textarea-nota-processo" class="nota-editor" placeholder="Escreva observações internas sobre este processo (ex: teses recursais, contato de testemunhas, proposta de acordo negociada)..."></textarea>
+                <div class="nota-footer">
+                  <span id="nota-status-msg" class="nota-status"><i data-lucide="check"></i> Anotação salva localmente</span>
+                  <small>As anotações são salvas com segurança no seu navegador.</small>
                 </div>
               </div>
             </div>
           </div>
         </section>
       </main>
+    </div>
+
+    <!-- ─── Modal Command Palette (Ctrl+K) ────────────────── -->
+    <div id="modal-command-palette" class="cmd-palette-modal hidden">
+      <div class="cmd-palette-backdrop" onclick="fecharCommandPalette()"></div>
+      <div class="cmd-palette-card">
+        <div class="cmd-palette-search-box">
+          <i data-lucide="search" class="cmd-search-icon"></i>
+          <input type="text" id="cmd-input" placeholder="Digite para buscar processos, prazos ou executar ações..." autocomplete="off">
+          <kbd class="cmd-esc-badge" onclick="fecharCommandPalette()">ESC</kbd>
+        </div>
+        <div class="cmd-palette-results" id="cmd-results-list">
+          <!-- Populado dinamicamente -->
+        </div>
+        <div class="cmd-palette-footer">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> navegar</span>
+          <span><kbd>↵</kbd> selecionar</span>
+          <span><kbd>ESC</kbd> fechar</span>
+        </div>
+      </div>
     </div>
 
     <!-- ─── Modal Novo Processo ───────────────────────────── -->

@@ -9,6 +9,11 @@ const state = {
   token: localStorage.getItem('mx_token') || null,
   user: JSON.parse(localStorage.getItem('mx_user') || 'null'),
   currentSection: 'dashboard',
+  cachedProcessos: [],
+  filteredProcessos: [],
+  activePill: 'all',
+  processosViewMode: 'cards',
+  currentProcesso: null,
 };
 
 // ─── API Client ─────────────────────────────────────────────
@@ -94,6 +99,9 @@ async function loadSectionData(section) {
     case 'prazos':
       await loadPrazos();
       break;
+    case 'calculadora':
+      initCalculadora();
+      break;
     case 'notificacoes':
       await loadNotificacoes();
       break;
@@ -147,14 +155,24 @@ function showToast(message, type = 'info') {
 
 function updateGreeting() {
   const el = document.getElementById('dashboard-greeting');
-  if (!el) return;
+  const heroEl = document.getElementById('dashboard-hero-greeting');
+  const dateEl = document.getElementById('hero-date-today');
+  
   const hour = new Date().getHours();
-  const nome = state.user?.nome?.split(' ')[0] || '';
+  const nome = state.user?.nome?.split(' ')[0] || 'Dr(a). Advogado(a)';
   let saudacao;
   if (hour < 12) saudacao = 'Bom dia';
   else if (hour < 18) saudacao = 'Boa tarde';
   else saudacao = 'Boa noite';
-  el.textContent = nome ? `${saudacao}, ${nome}` : saudacao;
+  
+  const textGreeting = `${saudacao}, ${nome}`;
+  if (el) el.textContent = textGreeting;
+  if (heroEl) heroEl.textContent = textGreeting;
+
+  if (dateEl) {
+    const hoje = new Date();
+    dateEl.textContent = hoje.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
 }
 
 // ─── Animated Counter ───────────────────────────────────────
@@ -220,11 +238,36 @@ async function loadDashboard() {
         .join('');
     }
 
-    // Carregar últimas movimentações
-    const processosRes = await api('/processos?porPagina=5');
-    const processosData = processosRes.data.processos;
-    const timelineContainer = document.getElementById('ultimas-movimentacoes');
+    // Carregar últimas movimentações e dados de distribuição por tribunal
+    const processosRes = await api('/processos?porPagina=50');
+    const processosData = processosRes.data.processos || [];
+    state.cachedProcessos = processosData;
 
+    // Atualizar Radar de Tribunais
+    let countTjmg = 0;
+    let countTrf = 0;
+    let countTrt = 0;
+    processosData.forEach((p) => {
+      const trib = (p.tribunal || '').toUpperCase();
+      if (trib.includes('TJMG') || trib.includes('JUSTIÇA ESTADUAL') || trib.includes('13')) countTjmg++;
+      else if (trib.includes('TRF') || trib.includes('FEDERAL') || trib.includes('01') || trib.includes('06')) countTrf++;
+      else if (trib.includes('TRT') || trib.includes('TRABALHO') || trib.includes('03')) countTrt++;
+      else countTjmg++; // padrão tribunal estadual
+    });
+
+    const totalRadar = Math.max(countTjmg + countTrf + countTrt, 1);
+    const setRadarBar = (idCount, idFill, count) => {
+      const elCount = document.getElementById(idCount);
+      const elFill = document.getElementById(idFill);
+      if (elCount) elCount.textContent = count;
+      if (elFill) elFill.style.width = `${Math.min(Math.round((count / totalRadar) * 100), 100)}%`;
+    };
+
+    setRadarBar('bar-tjmg-count', 'bar-tjmg-fill', countTjmg);
+    setRadarBar('bar-trf-count', 'bar-trf-fill', countTrf);
+    setRadarBar('bar-trt-count', 'bar-trt-fill', countTrt);
+
+    const timelineContainer = document.getElementById('ultimas-movimentacoes');
     const movimentacoes = processosData
       .filter((p) => p.movimentacoes && p.movimentacoes.length > 0)
       .map((p) => ({
@@ -262,12 +305,13 @@ async function loadDashboard() {
 async function loadProcessos() {
   const container = document.getElementById('processos-list');
   
-  // Show skeleton loading
-  container.innerHTML = `
-    <div class="skeleton skeleton-card"></div>
-    <div class="skeleton skeleton-card"></div>
-    <div class="skeleton skeleton-card"></div>
-  `;
+  if (container) {
+    container.innerHTML = `
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+    `;
+  }
   
   try {
     const busca = document.getElementById('processos-busca')?.value || '';
@@ -279,29 +323,195 @@ async function loadProcessos() {
 
     const res = await api(`/processos?${params.toString()}`);
     const { processos } = res.data;
-
-    if (processos.length === 0) {
+    state.cachedProcessos = processos || [];
+    aplicarFiltrosProcessos();
+  } catch (error) {
+    console.error('Erro ao carregar processos:', error);
+    if (container) {
       container.innerHTML = `
+        <div class="empty-state">
+          <i data-lucide="alert-circle"></i>
+          <p>Erro ao carregar processos</p>
+          <span>${error.message}</span>
+        </div>`;
+      lucide.createIcons();
+    }
+  }
+}
+
+function aplicarFiltrosProcessos() {
+  let list = [...state.cachedProcessos];
+  const pill = state.activePill || 'all';
+
+  if (pill === 'prazos') {
+    list = list.filter((p) => (p.prazos && p.prazos.length > 0) || (p._count?.prazos || 0) > 0);
+  } else if (pill === 'TJMG') {
+    list = list.filter((p) => (p.tribunal || '').toUpperCase().includes('TJMG') || (p.tribunal || '').includes('13'));
+  } else if (pill === 'TRF') {
+    list = list.filter((p) => (p.tribunal || '').toUpperCase().includes('TRF'));
+  } else if (pill === 'TRT') {
+    list = list.filter((p) => (p.tribunal || '').toUpperCase().includes('TRT'));
+  } else if (pill === 'ATIVO') {
+    list = list.filter((p) => (p.status || 'ATIVO').toUpperCase() === 'ATIVO');
+  }
+
+  state.filteredProcessos = list;
+  renderProcessosView();
+}
+
+function renderProcessosView() {
+  const cardsContainer = document.getElementById('processos-list');
+  const tableContainer = document.getElementById('processos-table-container');
+  const tableBody = document.getElementById('processos-table-body');
+  const processos = state.filteredProcessos;
+
+  if (state.processosViewMode === 'table') {
+    if (cardsContainer) cardsContainer.classList.add('hidden');
+    if (tableContainer) tableContainer.classList.remove('hidden');
+
+    if (!tableBody) return;
+    if (processos.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 32px; color: var(--text-muted);">
+            Nenhum processo corresponde aos filtros selecionados.
+          </td>
+        </tr>`;
+    } else {
+      tableBody.innerHTML = processos.map((p) => {
+        const ultimaMov = p.movimentacoes?.[0];
+        const ultimaMovTexto = ultimaMov ? ultimaMov.descricao : 'Sem movimentações';
+        const ultimaMovData = ultimaMov ? formatDate(ultimaMov.data) : '—';
+        const statusClass = `status-${(p.status || 'ativo').toLowerCase()}`;
+
+        return `
+          <tr onclick="verProcesso('${p.id}')">
+            <td>
+              <span class="table-cnj">${p.numeroCnj}</span>
+              <span class="table-classe">${p.classe || 'Classe N/A'}</span>
+            </td>
+            <td>
+              <div class="table-partes">
+                <span class="table-autor">${p.parteAutora || 'Autor não informado'}</span>
+                <span class="table-reu">vs ${p.parteRe || 'Réu não informado'}</span>
+              </div>
+            </td>
+            <td>
+              <div><strong>${p.tribunal || '—'}</strong></div>
+              <div style="font-size:0.76rem; color:var(--text-muted);">${p.vara || p.comarca || '—'}</div>
+            </td>
+            <td>
+              <span class="table-mov-text" title="${ultimaMovTexto}">${ultimaMovTexto}</span>
+              <span class="table-mov-date">${ultimaMovData}</span>
+            </td>
+            <td>
+              <span class="processo-status ${statusClass}">${p.status || 'ATIVO'}</span>
+            </td>
+            <td style="text-align: right;" onclick="event.stopPropagation()">
+              <button class="btn btn-sm btn-ghost" onclick="sincronizarProcesso('${p.id}')" title="Sincronizar">
+                <i data-lucide="refresh-cw"></i>
+              </button>
+              <button class="btn btn-sm btn-ghost" onclick="removerProcesso('${p.id}')" title="Remover">
+                <i data-lucide="trash-2"></i>
+              </button>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+  } else {
+    // Mode 'cards'
+    if (tableContainer) tableContainer.classList.add('hidden');
+    if (cardsContainer) cardsContainer.classList.remove('hidden');
+
+    if (!cardsContainer) return;
+    if (processos.length === 0) {
+      cardsContainer.innerHTML = `
         <div class="empty-state">
           <i data-lucide="folder-plus"></i>
           <p>Nenhum processo encontrado</p>
-          <span>Clique em "Novo Processo" para começar</span>
+          <span>Ajuste os filtros ou cadastre um novo processo</span>
         </div>`;
     } else {
-      container.innerHTML = processos.map((p) => renderProcessoCard(p)).join('');
+      cardsContainer.innerHTML = processos.map((p) => renderProcessoCard(p)).join('');
     }
-
-    lucide.createIcons();
-  } catch (error) {
-    console.error('Erro ao carregar processos:', error);
-    container.innerHTML = `
-      <div class="empty-state">
-        <i data-lucide="alert-circle"></i>
-        <p>Erro ao carregar processos</p>
-        <span>${error.message}</span>
-      </div>`;
-    lucide.createIcons();
   }
+
+  lucide.createIcons();
+}
+
+function alternarVisualizacaoProcessos(modo) {
+  state.processosViewMode = modo;
+  const btnCards = document.getElementById('btn-view-cards');
+  const btnTable = document.getElementById('btn-view-table');
+
+  if (modo === 'cards') {
+    btnCards?.classList.add('active');
+    btnTable?.classList.remove('active');
+  } else {
+    btnTable?.classList.add('active');
+    btnCards?.classList.remove('active');
+  }
+
+  renderProcessosView();
+}
+
+function filtrarPorPill(pill, el) {
+  state.activePill = pill;
+  document.querySelectorAll('.filter-pill').forEach((btn) => btn.classList.remove('active'));
+  if (el) el.classList.add('active');
+  aplicarFiltrosProcessos();
+}
+
+function filtrarProcessosRapido(status) {
+  showSection('processos');
+  const pillBtn = document.querySelector(`.filter-pill[data-pill="${status}"]`);
+  if (pillBtn) {
+    filtrarPorPill(status, pillBtn);
+  }
+}
+
+function exportarProcessosCSV() {
+  const processos = state.cachedProcessos.length > 0 ? state.cachedProcessos : state.filteredProcessos;
+  if (!processos || processos.length === 0) {
+    showToast('Nenhum processo para exportar', 'warning');
+    return;
+  }
+
+  const cabecalho = ['CNJ', 'Classe', 'Tribunal', 'Vara', 'Comarca', 'Autor', 'Reu', 'Valor da Causa', 'Status', 'Ultima Movimentacao', 'Data Ultima Movimentacao'];
+  const linhas = processos.map((p) => {
+    const ultMov = p.movimentacoes?.[0];
+    const escapeCsv = (str) => `"${(str || '').toString().replace(/"/g, '""')}"`;
+    return [
+      escapeCsv(p.numeroCnj),
+      escapeCsv(p.classe),
+      escapeCsv(p.tribunal),
+      escapeCsv(p.vara),
+      escapeCsv(p.comarca),
+      escapeCsv(p.parteAutora),
+      escapeCsv(p.parteRe),
+      escapeCsv(p.valorCausa ? `R$ ${parseFloat(p.valorCausa).toFixed(2)}` : ''),
+      escapeCsv(p.status || 'ATIVO'),
+      escapeCsv(ultMov ? ultMov.descricao : ''),
+      escapeCsv(ultMov ? formatDate(ultMov.data) : ''),
+    ].join(';');
+  });
+
+  const csvContent = '\uFEFF' + [cabecalho.join(';'), ...linhas].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `acervo_processos_moreira_xavier_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast('Planilha de processos exportada com sucesso!', 'success');
+}
+
+function imprimirRelatorioProcessos() {
+  showToast('Preparando pauta para impressão...', 'info');
+  setTimeout(() => window.print(), 300);
 }
 
 async function loadPrazos() {
@@ -681,12 +891,342 @@ async function verProcesso(id) {
       }
     };
 
+    // Subtabs & Notas Internas
+    state.currentProcesso = p;
+    
+    const movCountBadge = document.getElementById('detalhe-mov-tab-badge');
+    if (movCountBadge) movCountBadge.textContent = movs.length;
+    
+    const prazosCountBadge = document.getElementById('detalhe-prazos-tab-badge');
+    if (prazosCountBadge) prazosCountBadge.textContent = (p.prazos || []).length;
+
+    // Carregar nota interna do navegador
+    const textareaNota = document.getElementById('textarea-nota-processo');
+    if (textareaNota) {
+      textareaNota.value = localStorage.getItem(`mx_nota_${id}`) || '';
+    }
+
+    // Preencher lista completa de prazos na Subtab 3
+    const fullPrazosContainer = document.getElementById('detalhe-prazos-full-list');
+    if (fullPrazosContainer) {
+      if (p.prazos && p.prazos.length > 0) {
+        fullPrazosContainer.innerHTML = p.prazos.map(pr => renderPrazoItem(pr)).join('');
+      } else {
+        fullPrazosContainer.innerHTML = `
+          <div class="empty-state">
+            <i data-lucide="calendar-check"></i>
+            <p>Nenhum prazo registrado para este processo</p>
+          </div>`;
+      }
+    }
+
+    // Ativar subtab 'capa' por padrão
+    const tabCapaBtn = document.querySelector('.subtab-btn[data-subtab="capa"]');
+    alternarSubtabProcesso('capa', tabCapaBtn);
+
     lucide.createIcons();
   } catch (error) {
     showToast(`Erro ao carregar processo: ${error.message}`, 'error');
     showSection('processos');
   }
 }
+
+// ─── Subtabs & Detalhes Interativos ─────────────────────────
+
+function alternarSubtabProcesso(tabName, el) {
+  document.querySelectorAll('.subtab-btn').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.subtab-content').forEach((c) => c.classList.remove('active'));
+
+  if (el) el.classList.add('active');
+  const targetContent = document.getElementById(`subtab-${tabName}`);
+  if (targetContent) targetContent.classList.add('active');
+}
+
+function filtrarMovimentacoesProcesso(termo) {
+  const cards = document.querySelectorAll('#detalhe-timeline .mov-card');
+  const busca = (termo || '').toLowerCase().trim();
+
+  cards.forEach((card) => {
+    const texto = card.innerText.toLowerCase();
+    if (!busca || texto.includes(busca)) {
+      card.style.display = 'block';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+function salvarNotaProcessoAtual() {
+  if (!_currentProcessoId) return;
+  const textarea = document.getElementById('textarea-nota-processo');
+  if (!textarea) return;
+  const valor = textarea.value;
+  localStorage.setItem(`mx_nota_${_currentProcessoId}`, valor);
+
+  const statusMsg = document.getElementById('nota-status-msg');
+  if (statusMsg) {
+    statusMsg.classList.add('visible');
+    setTimeout(() => statusMsg.classList.remove('visible'), 3000);
+  }
+  showToast('Anotação interna salva com sucesso!', 'success');
+}
+
+function copiarCnjAtual() {
+  const cnj = document.getElementById('detalhe-cnj')?.textContent;
+  if (!cnj || cnj === 'Carregando...') {
+    showToast('Nenhum processo selecionado', 'warning');
+    return;
+  }
+  navigator.clipboard.writeText(cnj).then(() => {
+    showToast(`CNJ ${cnj} copiado para a área de transferência!`, 'success');
+  }).catch(() => {
+    showToast('Falha ao copiar CNJ', 'error');
+  });
+}
+
+function abrirTribunalAtual() {
+  const p = state.currentProcesso;
+  if (!p) return;
+  const cnj = (p.numeroCnj || '').replace(/\D/g, '');
+  const tribunal = (p.tribunal || '').toUpperCase();
+
+  let url = 'https://comunica.pje.jus.br/';
+  if (tribunal.includes('TJMG')) {
+    url = `https://eproc1g.tjmg.jus.br/eproc/externo_controlador.php?acao=processo_seleciona_publica&num_processo=${cnj}`;
+  } else if (tribunal.includes('TRF')) {
+    url = `https://eproc.trf6.jus.br/eproc/externo_controlador.php?acao=processo_seleciona_publica&num_processo=${cnj}`;
+  } else if (tribunal.includes('TRT')) {
+    url = `https://pje.trt3.jus.br/consultaprocessual/detalhe-processo/${p.numeroCnj}`;
+  }
+
+  window.open(url, '_blank');
+}
+
+// ─── Calculadora de Prazos CPC ──────────────────────────────
+
+function initCalculadora() {
+  const inputData = document.getElementById('calc-data-intima');
+  if (inputData && !inputData.value) {
+    const hoje = new Date().toISOString().split('T')[0];
+    inputData.value = hoje;
+  }
+  calcularPrazoInterativo();
+}
+
+function atualizarDiasTipo(tipo) {
+  const select = document.getElementById('calc-tipo');
+  const diasInput = document.getElementById('calc-dias');
+  if (!select || !diasInput) return;
+  const selectedOption = select.options[select.selectedIndex];
+  const dias = selectedOption.getAttribute('data-dias');
+  if (dias) diasInput.value = dias;
+  calcularPrazoInterativo();
+}
+
+function isDiaUtil(data) {
+  const day = data.getDay();
+  if (day === 0 || day === 6) return false; // Fim de semana
+  
+  // Recesso Forense (20 de Dezembro a 20 de Janeiro - Art. 220 CPC)
+  const mes = data.getMonth();
+  const dia = data.getDate();
+  if (mes === 11 && dia >= 20) return false;
+  if (mes === 0 && dia <= 20) return false;
+
+  // Feriados Nacionais
+  const feriadosFixos = [
+    '01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'
+  ];
+  const mmdd = `${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  if (feriadosFixos.includes(mmdd)) return false;
+
+  return true;
+}
+
+function proximoDiaUtil(data) {
+  const d = new Date(data);
+  d.setDate(d.getDate() + 1);
+  while (!isDiaUtil(d)) {
+    d.setDate(d.getDate() + 1);
+  }
+  return d;
+}
+
+function calcularPrazoInterativo() {
+  const dataIntimaVal = document.getElementById('calc-data-intima')?.value;
+  const diasUteisVal = parseInt(document.getElementById('calc-dias')?.value) || 15;
+  const displayVencimento = document.getElementById('calc-vencimento-display');
+  const displayCountdown = document.getElementById('calc-countdown-display');
+  const breakdownList = document.getElementById('calc-breakdown-list');
+  const actionsRow = document.getElementById('calc-actions-row');
+
+  if (!dataIntimaVal) return;
+
+  const [ano, mes, dia] = dataIntimaVal.split('-').map(Number);
+  const dataDisponibilizacao = new Date(ano, mes - 1, dia);
+
+  // 1. Data da Publicação (1º dia útil seguinte à disponibilização no DJEN - Art. 224, §2º)
+  const dataPublicacao = proximoDiaUtil(dataDisponibilizacao);
+
+  // 2. Termo Inicial da contagem (1º dia útil seguinte à publicação - Art. 224, §3º)
+  const termoInicial = proximoDiaUtil(dataPublicacao);
+
+  // 3. Contagem dos dias úteis
+  let dataAtual = new Date(termoInicial);
+  let diasContados = 1;
+
+  while (diasContados < diasUteisVal) {
+    dataAtual.setDate(dataAtual.getDate() + 1);
+    if (isDiaUtil(dataAtual)) {
+      diasContados++;
+    }
+  }
+
+  const dataFatal = new Date(dataAtual);
+  const dataFatalStr = dataFatal.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  if (displayVencimento) displayVencimento.textContent = formatDate(dataFatal.toISOString()) + ` (${dataFatal.toLocaleDateString('pt-BR', { weekday: 'short' })})`;
+  if (displayCountdown) displayCountdown.textContent = `Termo final em ${diasUteisVal} dias úteis (Art. 219 CPC)`;
+  if (actionsRow) actionsRow.style.display = 'block';
+
+  if (breakdownList) {
+    breakdownList.innerHTML = `
+      <div class="calc-step">
+        <div class="calc-step-icon"><i data-lucide="calendar"></i></div>
+        <div class="calc-step-content">
+          <strong>1. Disponibilização no DJEN</strong>
+          <span>${formatDate(dataDisponibilizacao.toISOString())} (${dataDisponibilizacao.toLocaleDateString('pt-BR', { weekday: 'long' })})</span>
+        </div>
+      </div>
+      <div class="calc-step">
+        <div class="calc-step-icon"><i data-lucide="bell"></i></div>
+        <div class="calc-step-content">
+          <strong>2. Considerada Publicada (Art. 224, §2º CPC)</strong>
+          <span>${formatDate(dataPublicacao.toISOString())} (1º dia útil seguinte)</span>
+        </div>
+      </div>
+      <div class="calc-step">
+        <div class="calc-step-icon"><i data-lucide="play-circle"></i></div>
+        <div class="calc-step-content">
+          <strong>3. Início da Contagem (Termo Inicial - Art. 224, §3º CPC)</strong>
+          <span>${formatDate(termoInicial.toISOString())} (1º dia útil seguinte à publicação)</span>
+        </div>
+      </div>
+      <div class="calc-step">
+        <div class="calc-step-icon"><i data-lucide="check-circle-2"></i></div>
+        <div class="calc-step-content">
+          <strong>4. Termo Final Fatal (Data do Vencimento)</strong>
+          <span style="color:var(--accent-orange); font-weight:600;">${dataFatalStr.toUpperCase()} (às 23h59)</span>
+        </div>
+      </div>
+    `;
+    lucide.createIcons({ nodes: [breakdownList] });
+  }
+}
+
+function imprimirCertidaoPrazo() {
+  window.print();
+}
+
+// ─── Command Palette (Ctrl+K Raycast Style) ─────────────────
+
+function abrirCommandPalette() {
+  const modal = document.getElementById('modal-command-palette');
+  const input = document.getElementById('cmd-input');
+  if (modal) {
+    modal.classList.remove('hidden');
+    filtrarCommandPalette('');
+    setTimeout(() => input?.focus(), 50);
+  }
+}
+
+function fecharCommandPalette() {
+  const modal = document.getElementById('modal-command-palette');
+  if (modal) modal.classList.add('hidden');
+}
+
+function filtrarCommandPalette(termo) {
+  const listEl = document.getElementById('cmd-results-list');
+  if (!listEl) return;
+  const busca = (termo || '').toLowerCase().trim();
+
+  const acoesPadrao = [
+    { id: 'novo', title: 'Novo Processo Judicial', meta: 'Cadastrar por número CNJ', icon: 'plus-circle', action: () => openModal('modal-processo') },
+    { id: 'calc', title: 'Calculadora de Prazos CPC', meta: 'Simular termo final conforme Art. 219 CPC', icon: 'calculator', action: () => showSection('calculadora') },
+    { id: 'prazos', title: 'Painel de Prazos Urgentes', meta: 'Ver prazos críticos e fatais', icon: 'clock', action: () => showSection('prazos') },
+    { id: 'csv', title: 'Exportar Acervo para Planilha CSV', meta: 'Baixar relatório completo em planilha', icon: 'download', action: () => exportarProcessosCSV() },
+    { id: 'print', title: 'Imprimir Pauta Processual', meta: 'Visualização formatada para audiências', icon: 'printer', action: () => imprimirRelatorioProcessos() },
+    { id: 'credenciais', title: 'Gerenciar Credenciais de Tribunais', meta: 'eproc TJMG, TRF6 e PJe TRT', icon: 'key-round', action: () => showSection('credenciais') },
+  ];
+
+  let acoesFiltradas = acoesPadrao.filter(a => !busca || a.title.toLowerCase().includes(busca) || a.meta.toLowerCase().includes(busca));
+  let processosFiltrados = (state.cachedProcessos || []).filter(p => {
+    if (!busca) return false;
+    return (p.numeroCnj || '').includes(busca) ||
+           (p.parteAutora || '').toLowerCase().includes(busca) ||
+           (p.parteRe || '').toLowerCase().includes(busca) ||
+           (p.tribunal || '').toLowerCase().includes(busca);
+  }).slice(0, 5);
+
+  let html = '';
+
+  if (acoesFiltradas.length > 0) {
+    html += `<div class="cmd-result-group-title">Ações do Sistema</div>`;
+    html += acoesFiltradas.map((a, idx) => `
+      <div class="cmd-result-item ${idx === 0 && !busca ? 'selected' : ''}" onclick="executarAcaoCommand(${idx})">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon"><i data-lucide="${a.icon}"></i></div>
+          <div class="cmd-result-info">
+            <span class="cmd-result-title">${a.title}</span>
+            <span class="cmd-result-meta">${a.meta}</span>
+          </div>
+        </div>
+        <span class="cmd-result-badge">Ação</span>
+      </div>
+    `).join('');
+  }
+
+  if (processosFiltrados.length > 0) {
+    html += `<div class="cmd-result-group-title">Processos Encontrados</div>`;
+    html += processosFiltrados.map((p) => `
+      <div class="cmd-result-item" onclick="fecharCommandPalette(); verProcesso('${p.id}')">
+        <div class="cmd-result-left">
+          <div class="cmd-result-icon"><i data-lucide="file-text"></i></div>
+          <div class="cmd-result-info">
+            <span class="cmd-result-title">${p.numeroCnj}</span>
+            <span class="cmd-result-meta">${p.parteAutora || 'Autor N/A'} vs ${p.parteRe || 'Réu N/A'} · ${p.tribunal || ''}</span>
+          </div>
+        </div>
+        <span class="cmd-result-badge">${p.status || 'ATIVO'}</span>
+      </div>
+    `).join('');
+  }
+
+  if (!html) {
+    html = `
+      <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.88rem;">
+        Nenhum comando ou processo encontrado para "${busca}"
+      </div>`;
+  }
+
+  listEl.innerHTML = html;
+  lucide.createIcons({ nodes: [listEl] });
+
+  window._cmdAcoesAtuais = acoesFiltradas;
+}
+
+function executarAcaoCommand(index) {
+  fecharCommandPalette();
+  if (window._cmdAcoesAtuais && window._cmdAcoesAtuais[index]) {
+    window._cmdAcoesAtuais[index].action();
+  }
+}
+
 
 async function updateBadges() {
   try {
@@ -910,19 +1450,56 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ─── Modals ─────────────────────────────────────────────
+  // ─── Modals & Quick Triggers ────────────────────────────
   // Novo Processo
   const openProcessoModal = () => openModal('modal-processo');
-  document.getElementById('btn-novo-processo').addEventListener('click', openProcessoModal);
-  document.getElementById('btn-novo-processo-2').addEventListener('click', openProcessoModal);
-  document.getElementById('modal-processo-close').addEventListener('click', () => closeModal('modal-processo'));
-  document.getElementById('modal-processo-cancel').addEventListener('click', () => closeModal('modal-processo'));
+  document.getElementById('btn-topbar-novo')?.addEventListener('click', openProcessoModal);
+  document.getElementById('btn-novo-processo-2')?.addEventListener('click', openProcessoModal);
+  document.getElementById('btn-novo-processo')?.addEventListener('click', openProcessoModal);
+  document.getElementById('modal-processo-close')?.addEventListener('click', () => closeModal('modal-processo'));
+  document.getElementById('modal-processo-cancel')?.addEventListener('click', () => closeModal('modal-processo'));
 
-  document.getElementById('form-novo-processo').addEventListener('submit', async (e) => {
+  // Topbar & Hero Triggers
+  document.getElementById('btn-trigger-cmd')?.addEventListener('click', abrirCommandPalette);
+  document.getElementById('btn-topbar-calc')?.addEventListener('click', () => showSection('calculadora'));
+  document.getElementById('hero-btn-calc')?.addEventListener('click', () => showSection('calculadora'));
+  document.getElementById('hero-btn-pauta')?.addEventListener('click', () => imprimirRelatorioProcessos());
+
+  // Command Palette Global Listeners
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const modal = document.getElementById('modal-command-palette');
+      if (modal && modal.classList.contains('hidden')) {
+        abrirCommandPalette();
+      } else {
+        fecharCommandPalette();
+      }
+    } else if (e.key === 'Escape') {
+      fecharCommandPalette();
+    }
+  });
+
+  const cmdInput = document.getElementById('cmd-input');
+  if (cmdInput) {
+    cmdInput.addEventListener('input', (e) => {
+      filtrarCommandPalette(e.target.value);
+    });
+    cmdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const firstAction = document.querySelector('#cmd-results-list .cmd-result-item');
+        if (firstAction) firstAction.click();
+      }
+    });
+  }
+
+  document.getElementById('form-novo-processo')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('btn-cadastrar-processo');
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spinner"></div> Consultando...';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Consultando...';
+    }
 
     try {
       const numeroCnj = document.getElementById('input-cnj').value;
@@ -938,9 +1515,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       showToast(error.message, 'error');
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i data-lucide="search"></i> Consultar e Cadastrar';
-      lucide.createIcons({ nodes: [btn] });
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="search"></i> Consultar e Cadastrar';
+        lucide.createIcons({ nodes: [btn] });
+      }
     }
   });
 
@@ -966,11 +1545,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Nova Credencial
-  document.getElementById('btn-nova-credencial').addEventListener('click', () => openModal('modal-credencial'));
-  document.getElementById('modal-credencial-close').addEventListener('click', () => closeModal('modal-credencial'));
-  document.getElementById('modal-credencial-cancel').addEventListener('click', () => closeModal('modal-credencial'));
+  document.getElementById('btn-nova-credencial')?.addEventListener('click', () => openModal('modal-credencial'));
+  document.getElementById('modal-credencial-close')?.addEventListener('click', () => closeModal('modal-credencial'));
+  document.getElementById('modal-credencial-cancel')?.addEventListener('click', () => closeModal('modal-credencial'));
 
-  document.getElementById('form-nova-credencial').addEventListener('submit', async (e) => {
+  document.getElementById('form-nova-credencial')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
       const tribunal = document.getElementById('cred-tribunal').value;
@@ -994,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Ler todas notificações
-  document.getElementById('btn-ler-todas').addEventListener('click', async () => {
+  document.getElementById('btn-ler-todas')?.addEventListener('click', async () => {
     try {
       await api('/notificacoes/ler-todas', { method: 'POST' });
       showToast('Todas as notificações foram marcadas como lidas', 'success');
